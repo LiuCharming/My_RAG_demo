@@ -13,10 +13,6 @@
 
 ### 1. RAG 问答页面
 
-主页面文件：
-
-- [F:\ls-quickstart\RAG\app.py](F:\ls-quickstart\RAG\app.py)
-
 支持：
 
 - 基于本地知识库进行问答
