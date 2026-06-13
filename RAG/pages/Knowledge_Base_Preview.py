@@ -143,13 +143,18 @@ with left:
     if not uploaded_docs:
         st.info("No uploaded files for this knowledge base.")
     else:
-        file_names = [doc.metadata.get("filename", "unknown") for doc in uploaded_docs]
-        selected_file = st.selectbox("Uploaded files", options=file_names)
-        selected_doc = next(
-            (doc for doc in uploaded_docs if doc.metadata.get("filename") == selected_file),
-            None,
+        file_names = sorted(
+            {
+                doc.metadata.get("filename", "unknown")
+                for doc in uploaded_docs
+            }
         )
-        if selected_doc:
+        selected_file = st.selectbox("Uploaded files", options=file_names)
+        selected_docs = [
+            doc for doc in uploaded_docs if doc.metadata.get("filename") == selected_file
+        ]
+        if selected_docs:
+            selected_doc = selected_docs[0]
             st.caption(selected_doc.metadata.get("source", ""))
             file_type = selected_doc.metadata.get("file_type")
             page_count = selected_doc.metadata.get("page_count")
@@ -160,9 +165,15 @@ with left:
                 if page_count:
                     details.append(f"pages: {page_count}")
                 st.caption(" | ".join(details))
+
+            preview_text = "\n\n".join(
+                doc.page_content for doc in selected_docs[: min(len(selected_docs), 3)]
+            )
+            if len(selected_docs) > 3:
+                preview_text += "\n\n[Preview limited to the first 3 pages]"
             st.text_area(
                 "File preview",
-                value=selected_doc.page_content[:4000],
+                value=preview_text[:4000],
                 height=320,
             )
 
@@ -188,6 +199,34 @@ with right:
         else:
             preview_chunks = chunks
             st.caption(f"Total chunks: {len(chunks)}")
+
+        available_sources = sorted(
+            {
+                chunk.metadata.get("filename")
+                or chunk.metadata.get("dataset")
+                or chunk.metadata.get("source")
+                or "unknown"
+                for chunk in preview_chunks
+            }
+        )
+        selected_source = st.selectbox(
+            "Filter by source",
+            options=["All files"] + available_sources,
+            index=0,
+        )
+        if selected_source != "All files":
+            preview_chunks = [
+                chunk
+                for chunk in preview_chunks
+                if (
+                    chunk.metadata.get("filename")
+                    or chunk.metadata.get("dataset")
+                    or chunk.metadata.get("source")
+                    or "unknown"
+                )
+                == selected_source
+            ]
+            st.caption(f"Filtered chunks: {len(preview_chunks)}")
 
         st.subheader("Chunk List")
         if not preview_chunks:

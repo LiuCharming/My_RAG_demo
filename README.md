@@ -1,114 +1,120 @@
 # Local RAG System
 
-一个基于 `Streamlit + Chroma + BM25/Vector/Hybrid 检索 + Rerank` 的本地 RAG 项目。
+A local RAG app built with Streamlit, Chroma, BM25 / vector / hybrid retrieval, optional reranking, and a small knowledge-base management workflow.
 
-这个项目当前重点放在两件事上：
+This project is aimed at two things:
 
-1. 做一个可直接交互使用的 RAG 问答页面  
-2. 做一个可调试、可预览、可管理知识库内容的本地工具
+1. a RAG chat app that we can actually use and test
+2. a local knowledge-base tool that lets us inspect, preview, and debug indexed content
 
----
+## What it supports
 
-## 当前功能
+### Chat app
 
-### 1. RAG 问答页面
+Main entry:
 
-主页面文件：
+- [F:\ls-quickstart\RAG\app.py](F:\ls-quickstart\RAG\app.py)
 
-- [RAG/app.py](F:/ls-quickstart/RAG/app.py)
+Features:
 
-支持：
+- knowledge-base question answering
+- streaming answers
+- evidence chunk display
+- rerank score display
+- switchable knowledge sources
 
-- 基于知识库的问答
-- 流式输出回答
-- 展示召回到的证据 chunk
-- 展示 rerank 分数
-- 支持多种知识源切换
+### Retrieval modes
 
-支持的知识源：
-
-- `web`：网页文章
-- `dataset`：CMRC2018 数据集
-- `custom`：自定义知识库
-
----
-
-### 2. 检索模式切换
-
-当前支持三种检索方式：
+The app supports three retrieval modes:
 
 - `vector`
 - `bm25`
 - `hybrid`
 
-其中：
+In practice:
 
-- `vector` 更偏语义检索
-- `bm25` 更偏关键词匹配
-- `hybrid` 结合两者结果
+- `vector` is better for semantic matching
+- `bm25` is better for direct keyword matching
+- `hybrid` combines both
 
----
+### Rerank toggle
 
-### 3. Rerank 开关
+The UI supports turning rerank on and off so we can compare:
 
-页面支持直接打开或关闭 rerank，用于比较：
+- direct retrieval-to-answer
+- retrieval followed by reranking
 
-- 召回后直接生成
-- 召回后再重排生成
+### Knowledge sources
 
-这对实验和性能对比很有帮助。
+The app currently supports:
 
----
+- `web`: index a web article or uploaded local files
+- `dataset`: index a Hugging Face dataset with configurable dataset name and split
+- `custom`: create and reuse named local knowledge bases
 
-### 4. 自定义知识库
+### Custom knowledge bases
 
-当前支持创建和使用自定义知识库：
+Custom knowledge bases can be named and reused, for example:
 
-- 可以给知识库命名，例如 `python_manual`
-- 可以上传本地 `txt` / `md` 文件作为语料
-- 可以从已有知识库下拉选择继续使用
+- `python_manual`
+- `company_docs`
+- `ml_notes`
 
-上传文件会保存在本地目录中，知识库按名称隔离管理。
+Supported upload formats:
 
----
+- `txt`
+- `md`
+- `pdf`
 
-### 5. 知识库预览页面
+Uploaded files are stored locally and isolated by knowledge-base name.
 
-预览页面文件：
+### PDF upload
 
-- [RAG/pages/Knowledge_Base_Preview.py](F:/ls-quickstart/RAG/pages/Knowledge_Base_Preview.py)
+PDF upload is supported for both:
 
-支持：
+- `web` mode uploads
+- `custom` knowledge-base uploads
 
-- 查看当前知识库概览
-- 预览上传文件内容
-- 查看 chunk cache
-- 按关键词搜索 chunk
-- 浏览 chunk 列表
+PDFs are parsed page by page. That means:
 
-这个页面主要用于调试知识库内容和排查检索问题。
+- each page can become its own source document
+- page-level metadata is preserved
+- preview can show file type and page count
 
----
+This makes PDF retrieval easier to inspect and debug than treating the whole file as one giant block.
 
-### 6. OCR-RAG
+### Knowledge-base preview page
 
-OCR-RAG 相关文件：
+Preview page:
 
-- [RAG/OCR_RAG.py](F:/ls-quickstart/RAG/OCR_RAG.py)
-- [RAG/ocr_support.py](F:/ls-quickstart/RAG/ocr_support.py)
+- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
 
-支持把图片中的文字抽取出来，再作为知识库进行问答。
+It supports:
 
-当前 OCR-RAG 适合做单独实验或后续功能扩展。
+- viewing knowledge-base overview information
+- previewing uploaded files
+- searching cached chunks
+- filtering chunk results by source file
+- browsing chunk metadata and content
 
----
+This page is mainly for debugging and understanding what actually got indexed.
 
-## 项目结构
+### OCR-RAG
 
-主要使用的正式代码如下：
+OCR-related files:
+
+- [F:\ls-quickstart\RAG\OCR_RAG.py](F:\ls-quickstart\RAG\OCR_RAG.py)
+- [F:\ls-quickstart\RAG\ocr_support.py](F:\ls-quickstart\RAG\ocr_support.py)
+
+This path is intended for image-to-text retrieval experiments and can be extended later.
+
+## Project structure
+
+Main working files:
 
 ```text
 README.md
+requirements.txt
 .gitignore
 RAG/
   app.py
@@ -123,123 +129,107 @@ RAG/
     Knowledge_Base_Preview.py
 ```
 
-各文件职责：
+Responsibilities:
 
-- `app.py`：主问答页面
-- `rag_settings.py`：配置项
-- `knowledge_base.py`：知识源加载与文档切分
-- `index_builder.py`：本地向量库构建与 chunk cache
-- `rag_pipeline.py`：检索、BM25、hybrid、rerank、生成
-- `rag_service.py`：给页面调用的统一服务层
-- `pages/Knowledge_Base_Preview.py`：知识库预览与搜索
+- `app.py`: main chat UI
+- `rag_settings.py`: shared settings and paths
+- `knowledge_base.py`: load and prepare source documents
+- `index_builder.py`: build local vector store and chunk cache
+- `rag_pipeline.py`: retrieval, BM25, hybrid logic, rerank, answer generation
+- `rag_service.py`: service layer used by the UI
+- `Knowledge_Base_Preview.py`: inspect uploaded files and chunk cache
 
----
+## Installation
 
-## 运行前准备
+Use the virtual environment in this project if available.
 
-### 1. Python 环境
-
-建议使用项目内的虚拟环境：
-
-```powershell
-.\.venv\Scripts\python.exe
-```
-
-### 2. 安装依赖
-
-项目根目录下已经提供：
-
-- [requirements.txt](F:/ls-quickstart/requirements.txt)
-
-安装方式：
+Install dependencies with:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 3. 环境变量
+PDF upload requires:
 
-项目不再把 API key 写死在主链路代码中，运行前需要提供环境变量：
+- `pypdf`
+
+This is already included in `requirements.txt`.
+
+## Environment variables
+
+Do not hardcode API keys in the code.
+
+Set environment variables before running:
 
 - `DEEPSEEK_API_KEY`
-- `LANGSMITH_API_KEY`（如果需要 LangSmith tracing）
+- `LANGSMITH_API_KEY` if tracing is needed
 
-PowerShell 示例：
+Example:
 
 ```powershell
 $env:DEEPSEEK_API_KEY="your_key"
 $env:LANGSMITH_API_KEY="your_key"
 ```
 
-也可以使用 `.env`，但请不要把 `.env` 提交到 Git。
+You can also use a local `.env` file, but it should not be committed.
 
----
-
-## 启动方式
-
-在项目根目录运行：
+## Run the app
 
 ```powershell
 .\.venv\Scripts\python.exe -m streamlit run .\RAG\app.py --server.fileWatcherType none --server.headless true
 ```
 
-启动后在浏览器访问：
+Then open:
 
 - [http://localhost:8501](http://localhost:8501)
 
----
+## Typical workflow
 
-## 使用流程
+### Build or rebuild an index
 
-### 问答页面
+1. choose a knowledge source
+2. configure retrieval mode and rerank settings
+3. upload files if needed
+4. click `Rebuild Local Index`
 
-1. 选择知识源
-2. 选择检索模式
-3. 选择是否启用 rerank
-4. 如果需要，点击 `Rebuild Local Index`
-5. 输入问题并查看回答与证据
+### Ask questions
 
-### 自定义知识库
+1. build the index
+2. ask a question in the chat
+3. inspect evidence chunks on the right
 
-1. `Knowledge source` 选择 `custom`
-2. 选择已有知识库，或创建新知识库名称
-3. 上传 `txt` / `md` 文件
-4. 点击 `Rebuild Local Index`
-5. 返回聊天页提问
+### Preview indexed content
 
-### 知识库预览
+1. open the knowledge-base preview page
+2. choose the same knowledge source
+3. inspect files and chunks
+4. search or filter chunk results
 
-1. 从主页面右侧点击 `Open knowledge base preview`
-2. 切换知识源
-3. 查看文件、chunk 和搜索结果
+## Recent changes
 
----
+Recent work included:
 
-## 近期改动
+- vector / BM25 / hybrid retrieval support
+- Chinese tokenization for BM25
+- rerank toggle
+- configurable dataset name and split
+- custom knowledge-base creation and reuse
+- knowledge-base preview page
+- chunk search and source filtering
+- PDF upload support
+- page-level PDF metadata
+- removal of hardcoded API keys from the main RAG path
 
-当前版本已经完成的主要改动包括：
+## Security notes
 
-- 支持 `vector / bm25 / hybrid` 三种检索模式
-- 支持 rerank 开关
-- 为 BM25 增加中文分词支持
-- 修复 BM25 在 chunk cache 缺失时无法正确工作的情况
-- 支持自定义知识库创建与切换
-- 增加知识库预览页面
-- 增加 chunk 搜索能力
-- 将主链路中的明文 API key 改为环境变量读取
-
----
-
-## 安全说明
-
-请不要把以下内容提交到仓库：
+Do not commit:
 
 - `.env`
-- API key
-- 模型缓存
-- 向量库缓存
+- API keys
+- model cache
+- vector database cache
 
-当前 `.gitignore` 已忽略：
+Current `.gitignore` already excludes:
 
 - `.venv/`
 - `.hf_cache/`
@@ -247,34 +237,32 @@ $env:LANGSMITH_API_KEY="your_key"
 - `__pycache__/`
 - `.env`
 
-如果 key 曾经进入 Git 历史，即使当前代码已删除，也建议：
+If a key was ever committed before, treat it as leaked:
 
-1. 立即更换旧 key
-2. 重建本地 Git 历史
-3. 再进行远程推送
+1. rotate it
+2. stop using the old key
+3. clean local git history before pushing if needed
 
----
+## Ideas for next steps
 
-## 后续可以继续扩展的方向
+- `docx` upload support
+- delete custom knowledge bases
+- performance panel with retrieval / rerank / generation timing
+- chunk highlighting in preview
+- source-aware hybrid result labels
+- Docker packaging
 
-- 支持 `pdf` / `docx` 上传
-- 支持 chunk 高亮
-- 支持按文件过滤 chunk
-- 支持删除自定义知识库
-- 增加耗时统计面板
-- 增加 Docker 部署文件
+## Notes
 
----
+This project is currently best described as:
 
-## 说明
+- a local RAG prototype
+- a retrieval experiment surface
+- a knowledge-base inspection tool
 
-这个项目当前更偏“本地 RAG 原型系统 + 实验调试工具”。
+It is already suitable for:
 
-它已经可以完成：
-
-- 自定义知识库构建
-- 本地问答
-- 多检索模式对比
-- 知识库内容预览
-
-适合继续往课程项目、实验系统或本地原型应用方向迭代。
+- local demos
+- course projects
+- retrieval experiments
+- iterative knowledge-base tooling

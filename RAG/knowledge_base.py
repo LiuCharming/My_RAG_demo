@@ -45,7 +45,7 @@ def load_cmrc2018_documents(dataset_name: str, split: str) -> list[Document]:
     return documents
 
 
-def read_pdf_text(path: Path) -> tuple[str, dict]:
+def read_pdf_documents(path: Path) -> list[Document]:
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -54,39 +54,34 @@ def read_pdf_text(path: Path) -> tuple[str, dict]:
         ) from exc
 
     reader = PdfReader(str(path))
-    pages = []
-    for page in reader.pages:
-        pages.append((page.extract_text() or "").strip())
+    page_count = len(reader.pages)
+    documents = []
+    for page_index, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        documents.append(
+            Document(
+                page_content=text,
+                metadata={
+                    "source": str(path),
+                    "filename": path.name,
+                    "file_type": "pdf",
+                    "page_number": page_index,
+                    "page_count": page_count,
+                },
+            )
+        )
+    return documents
 
-    text = "\n\n".join(page for page in pages if page)
-    metadata = {
-        "file_type": "pdf",
-        "page_count": len(reader.pages),
-    }
-    return text.strip(), metadata
 
-
-def read_uploaded_text(path: Path, strict_pdf: bool = True) -> tuple[str, dict]:
+def read_uploaded_text(path: Path) -> tuple[str, dict]:
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
         return (
             path.read_text(encoding="utf-8", errors="ignore").strip(),
             {"file_type": suffix.lstrip(".")},
         )
-
-    if suffix == ".pdf":
-        try:
-            return read_pdf_text(path)
-        except RuntimeError:
-            if strict_pdf:
-                raise
-            return (
-                "PDF preview is unavailable because pypdf is not installed.",
-                {
-                    "file_type": "pdf",
-                    "preview_error": "missing_pypdf",
-                },
-            )
 
     return "", {}
 
@@ -102,7 +97,27 @@ def load_uploaded_documents(folder: str, strict_pdf: bool = True) -> list[Docume
             continue
         if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
             continue
-        text, extra_metadata = read_uploaded_text(path, strict_pdf=strict_pdf)
+        if path.suffix.lower() == ".pdf":
+            try:
+                pdf_documents = read_pdf_documents(path)
+            except RuntimeError:
+                if strict_pdf:
+                    raise
+                pdf_documents = [
+                    Document(
+                        page_content="PDF preview is unavailable because pypdf is not installed.",
+                        metadata={
+                            "source": str(path),
+                            "filename": path.name,
+                            "file_type": "pdf",
+                            "preview_error": "missing_pypdf",
+                        },
+                    )
+                ]
+            documents.extend(pdf_documents)
+            continue
+
+        text, extra_metadata = read_uploaded_text(path)
         if not text:
             continue
         documents.append(
