@@ -4,8 +4,8 @@
 
 这个项目当前主要解决两件事：
 
-1. 做一个可以直接交互使用的本地 RAG 问答页面
-2. 做一个可以预览、检查、调试知识库内容的本地工具
+1. 做一个可以直接交互使用的本地 RAG 问答页面  
+2. 做一个可以预览、检查、调试和编辑知识库内容的本地工具
 
 ---
 
@@ -91,9 +91,9 @@
 
 处理逻辑是：
 
-1. 先用 `PyMuPDF` 提取 PDF 文本
-2. 如果某一页看起来明显乱码，就自动尝试 OCR fallback
-3. 文本先按页提取，再做跨页合并
+1. 先用 `PyMuPDF` 提取 PDF 文本  
+2. 如果某一页看起来明显乱码，就自动尝试 OCR fallback  
+3. 文本先按页提取，再做跨页合并  
 4. 合并后的内容再进入 chunk 切分
 
 当前会保留这些元数据：
@@ -120,6 +120,10 @@
 
 ### 7. 知识库预览页面
 
+预览页文件：
+
+- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
+
 支持：
 
 - 查看当前知识库概览
@@ -129,12 +133,41 @@
 - 按文件过滤 chunk
 - 查看 chunk 页码范围和提取方式
 
-这个页面主要用于调试：
+为了减少卡顿，预览页现在做了按需加载：
 
-- 为什么没命中
-- 命中了哪些内容
-- PDF 解析出来的文本是否可用
+- 进入页面时先只读取文件列表
+- 只有选中某个文件时，才解析这个文件的内容
 
+这对包含大 PDF 的知识库会明显更轻。
+
+---
+
+### 8. 知识库编辑功能
+
+当前已经支持一版基础的知识库编辑能力：
+
+- 删除整个自定义知识库
+- 重命名自定义知识库
+- 删除知识库中的单个文件
+- 删除单个文件后自动重建索引
+- 上传新文件后重新构建知识库
+
+这部分主要集中在：
+
+- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
+- [F:\ls-quickstart\RAG\rag_service.py](F:\ls-quickstart\RAG\rag_service.py)
+- [F:\ls-quickstart\RAG\index_builder.py](F:\ls-quickstart\RAG\index_builder.py)
+
+---
+
+### 9. OCR-RAG
+
+相关文件：
+
+- [F:\ls-quickstart\RAG\OCR_RAG.py](F:\ls-quickstart\RAG\OCR_RAG.py)
+- [F:\ls-quickstart\RAG\ocr_support.py](F:\ls-quickstart\RAG\ocr_support.py)
+
+这部分用于图像文本识别与 OCR-RAG 实验，当前可以作为独立能力继续扩展。
 
 ---
 
@@ -167,7 +200,7 @@ RAG/
 - `index_builder.py`：构建本地向量库与 chunk cache
 - `rag_pipeline.py`：检索、BM25、hybrid、rerank、生成
 - `rag_service.py`：页面调用的统一服务层
-- `Knowledge_Base_Preview.py`：知识库预览与搜索
+- `Knowledge_Base_Preview.py`：知识库预览、搜索与编辑
 
 ---
 
@@ -212,7 +245,7 @@ $env:LANGSMITH_API_KEY="your_key"
 
 也可以使用本地 `.env` 文件，但不要提交到 Git。
 
-推荐在项目根目录创建 `.env`：
+推荐在项目根目录创建：
 
 ```env
 DEEPSEEK_API_KEY=your_key
@@ -261,6 +294,15 @@ LANGSMITH_API_KEY=your_key
 2. 选择相同知识源
 3. 查看文件内容、chunk、搜索结果和页范围
 
+### 编辑知识库
+
+在 `custom` 模式下，你可以：
+
+- 重命名知识库
+- 删除整个知识库
+- 删除单个文件
+- 上传新文件后重建索引
+
 ---
 
 ## 最近这版做过的改动
@@ -278,7 +320,10 @@ LANGSMITH_API_KEY=your_key
 - 为乱码页增加 OCR fallback
 - PDF 内容从按页提取升级为跨页合并后再切分
 - 保留页级与页范围 metadata
+- 预览页改为按需加载文件内容，减少首屏卡顿
+- 增加知识库删除、重命名、单文件删除功能
 - 主链路中移除硬编码 API key
+- 支持 `.env` / `.env.local` 自动加载
 
 ---
 
@@ -310,11 +355,11 @@ LANGSMITH_API_KEY=your_key
 ## 后续可继续扩展的方向
 
 - `docx` 上传
-- 删除自定义知识库
 - 性能面板（检索 / rerank / 生成耗时）
 - chunk 高亮
 - 表格型 PDF 的额外清洗
 - 页眉页脚清洗
+- 更细粒度的知识库编辑
 - Docker 部署
 
 ---
@@ -325,11 +370,11 @@ LANGSMITH_API_KEY=your_key
 
 - 本地 RAG 原型系统
 - 检索实验平台
-- 知识库调试与预览工具
+- 知识库调试与编辑工具
 
 已经适合用在：
 
 - 课程项目
 - 本地演示
 - 检索效果对比实验
-- 知识库构建与调试
+- 知识库构建、管理与调试
