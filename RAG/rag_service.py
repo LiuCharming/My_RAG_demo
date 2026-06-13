@@ -199,6 +199,7 @@ def delete_file_from_custom_knowledge_base(
 
 def ask_rag(
     question: str,
+    chat_history: list[dict] | None = None,
     collection_name: str = "rag_demo",
     source_type: str = "web",
     source_url: str = RAGSettings.source_url,
@@ -228,11 +229,12 @@ def ask_rag(
         use_rerank=use_rerank,
         rerank_k=rerank_k,
     )
-    result = pipeline.ask(question)
+    result = pipeline.ask(question, chat_history=chat_history)
     return {
         "answer": result["answer"],
         "retrieved_docs": result["retrieved_docs"],
         "rerank_scores": result["rerank_scores"],
+        "rewritten_question": result.get("rewritten_question", question),
         "metrics": result.get("metrics", {}),
         "config": {
             "collection_name": collection_name,
@@ -253,6 +255,7 @@ def ask_rag(
 
 def prepare_rag_response(
     question: str,
+    chat_history: list[dict] | None = None,
     collection_name: str = "rag_demo",
     source_type: str = "web",
     source_url: str = RAGSettings.source_url,
@@ -282,11 +285,12 @@ def prepare_rag_response(
         use_rerank=use_rerank,
         rerank_k=rerank_k,
     )
-    prepared = pipeline.prepare_answer(question)
+    prepared = pipeline.prepare_answer(question, chat_history=chat_history)
     return {
         "pipeline": pipeline,
         "retrieved_docs": prepared["retrieved_docs"],
         "rerank_scores": prepared["rerank_scores"],
+        "rewritten_question": prepared.get("rewritten_question", question),
         "metrics": prepared.get("metrics", {}),
         "config": {
             "collection_name": collection_name,

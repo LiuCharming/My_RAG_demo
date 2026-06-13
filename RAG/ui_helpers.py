@@ -102,3 +102,6 @@ def ensure_chat_state(session_state) -> None:
 
     if "last_metrics" not in session_state:
         session_state.last_metrics = {}
+
+    if "last_rewritten_question" not in session_state:
+        session_state.last_rewritten_question = ""

@@ -165,23 +165,32 @@ with right:
     if st.session_state.last_config:
         st.json(st.session_state.last_config, expanded=True)
 
+    if st.session_state.last_rewritten_question:
+        st.subheader("Search Query")
+        st.caption("Question used for retrieval after multi-turn rewriting")
+        st.write(st.session_state.last_rewritten_question)
+
     if st.session_state.last_metrics:
         st.subheader("Performance")
         metrics = st.session_state.last_metrics
         metric_left, metric_right = st.columns(2)
         metric_left.metric(
+            "Rewrite",
+            f"{metrics.get('rewrite_time', 0.0):.2f}s",
+        )
+        metric_right.metric(
             "Retrieval",
             f"{metrics.get('retrieval_time', 0.0):.2f}s",
         )
-        metric_right.metric(
+        metric_left.metric(
             "Rerank",
             f"{metrics.get('rerank_time', 0.0):.2f}s",
         )
-        metric_left.metric(
+        metric_right.metric(
             "Generation",
             f"{metrics.get('generation_time', 0.0):.2f}s",
         )
-        metric_right.metric(
+        metric_left.metric(
             "Total",
             f"{metrics.get('total_time', 0.0):.2f}s",
         )
@@ -217,6 +226,7 @@ if prompt:
             with st.spinner("Retrieving and generating answer..."):
                 result = prepare_rag_response(
                     prompt,
+                    chat_history=st.session_state.messages[-6:],
                     collection_name=collection_name,
                     source_type=source_type,
                     source_url=source_url,
@@ -257,4 +267,5 @@ if prompt:
     st.session_state.last_scores = result["rerank_scores"]
     st.session_state.last_config = result["config"]
     st.session_state.last_metrics = base_metrics
+    st.session_state.last_rewritten_question = result.get("rewritten_question", prompt)
     st.rerun()
