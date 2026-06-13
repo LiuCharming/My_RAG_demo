@@ -62,9 +62,9 @@ with st.sidebar:
         source_url = st.text_input("Web article URL", value=DEFAULT_SOURCE_URL)
         uploaded_files = st.file_uploader(
             "Or upload local files",
-            type=["txt", "md"],
+            type=["txt", "md", "pdf"],
             accept_multiple_files=True,
-            help="If files are uploaded, indexing will use these files first.",
+            help="If files are uploaded, indexing will use these files first. Supported: txt, md, pdf.",
         )
         collection_name = "web_demo"
     elif source_type == "custom":
@@ -90,9 +90,9 @@ with st.sidebar:
             st.info("No custom knowledge base yet. Create one by uploading files below.")
         uploaded_files = st.file_uploader(
             "Upload knowledge files",
-            type=["txt", "md"],
+            type=["txt", "md", "pdf"],
             accept_multiple_files=True,
-            help="Upload files to create or replace the corpus of this custom knowledge base.",
+            help="Upload files to create or replace the corpus of this custom knowledge base. Supported: txt, md, pdf.",
         )
         collection_name = f"custom_{sanitize_name(custom_source_name)}"
     else:

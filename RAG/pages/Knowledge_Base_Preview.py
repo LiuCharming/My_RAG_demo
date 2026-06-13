@@ -108,8 +108,15 @@ settings = make_settings(
 cache_path = get_chunks_cache_path(settings)
 chunks = load_chunks_cache(settings)
 uploaded_docs = []
+uploaded_docs_error = None
 if settings.uploaded_files_dir:
-    uploaded_docs = load_uploaded_documents(settings.uploaded_files_dir)
+    try:
+        uploaded_docs = load_uploaded_documents(
+            settings.uploaded_files_dir,
+            strict_pdf=False,
+        )
+    except RuntimeError as exc:
+        uploaded_docs_error = str(exc)
 
 left, right = st.columns([1, 2], gap="large")
 
@@ -131,6 +138,8 @@ with left:
     )
 
     st.subheader("Files")
+    if uploaded_docs_error:
+        st.warning(uploaded_docs_error)
     if not uploaded_docs:
         st.info("No uploaded files for this knowledge base.")
     else:
@@ -142,6 +151,15 @@ with left:
         )
         if selected_doc:
             st.caption(selected_doc.metadata.get("source", ""))
+            file_type = selected_doc.metadata.get("file_type")
+            page_count = selected_doc.metadata.get("page_count")
+            if file_type or page_count:
+                details = []
+                if file_type:
+                    details.append(f"type: {file_type}")
+                if page_count:
+                    details.append(f"pages: {page_count}")
+                st.caption(" | ".join(details))
             st.text_area(
                 "File preview",
                 value=selected_doc.page_content[:4000],

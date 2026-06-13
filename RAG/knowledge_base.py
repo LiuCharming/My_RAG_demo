@@ -45,7 +45,53 @@ def load_cmrc2018_documents(dataset_name: str, split: str) -> list[Document]:
     return documents
 
 
-def load_uploaded_documents(folder: str) -> list[Document]:
+def read_pdf_text(path: Path) -> tuple[str, dict]:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError(
+            "PDF upload requires the pypdf package. Install requirements.txt first."
+        ) from exc
+
+    reader = PdfReader(str(path))
+    pages = []
+    for page in reader.pages:
+        pages.append((page.extract_text() or "").strip())
+
+    text = "\n\n".join(page for page in pages if page)
+    metadata = {
+        "file_type": "pdf",
+        "page_count": len(reader.pages),
+    }
+    return text.strip(), metadata
+
+
+def read_uploaded_text(path: Path, strict_pdf: bool = True) -> tuple[str, dict]:
+    suffix = path.suffix.lower()
+    if suffix in {".txt", ".md"}:
+        return (
+            path.read_text(encoding="utf-8", errors="ignore").strip(),
+            {"file_type": suffix.lstrip(".")},
+        )
+
+    if suffix == ".pdf":
+        try:
+            return read_pdf_text(path)
+        except RuntimeError:
+            if strict_pdf:
+                raise
+            return (
+                "PDF preview is unavailable because pypdf is not installed.",
+                {
+                    "file_type": "pdf",
+                    "preview_error": "missing_pypdf",
+                },
+            )
+
+    return "", {}
+
+
+def load_uploaded_documents(folder: str, strict_pdf: bool = True) -> list[Document]:
     documents = []
     base = Path(folder)
     if not base.exists():
@@ -54,9 +100,9 @@ def load_uploaded_documents(folder: str) -> list[Document]:
     for path in sorted(base.glob("*")):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in {".txt", ".md"}:
+        if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
             continue
-        text = path.read_text(encoding="utf-8", errors="ignore").strip()
+        text, extra_metadata = read_uploaded_text(path, strict_pdf=strict_pdf)
         if not text:
             continue
         documents.append(
@@ -65,6 +111,7 @@ def load_uploaded_documents(folder: str) -> list[Document]:
                 metadata={
                     "source": str(path),
                     "filename": path.name,
+                    **extra_metadata,
                 },
             )
         )
