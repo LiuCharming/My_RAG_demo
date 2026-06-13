@@ -83,6 +83,59 @@ def looks_garbled_text(text: str) -> bool:
 
     return allowed_ratio < 0.72 or odd_ratio > 0.18
 
+
+def merge_pdf_page_documents(
+    page_documents: list[Document],
+    window_size: int = 2,
+    stride: int = 1,
+) -> list[Document]:
+    if not page_documents:
+        return []
+
+    merged_documents = []
+    total_pages = len(page_documents)
+
+    for start_index in range(0, total_pages, stride):
+        window = page_documents[start_index : start_index + window_size]
+        if not window:
+            continue
+
+        merged_text = "\n\n".join(
+            doc.page_content.strip() for doc in window if doc.page_content.strip()
+        ).strip()
+        if not merged_text:
+            continue
+
+        first_page = window[0]
+        last_page = window[-1]
+        methods = []
+        for doc in window:
+            method = doc.metadata.get("extraction_method")
+            if method and method not in methods:
+                methods.append(method)
+
+        merged_documents.append(
+            Document(
+                page_content=merged_text,
+                metadata={
+                    "source": first_page.metadata.get("source"),
+                    "filename": first_page.metadata.get("filename"),
+                    "file_type": "pdf",
+                    "page_count": first_page.metadata.get("page_count"),
+                    "page_start": first_page.metadata.get("page_number"),
+                    "page_end": last_page.metadata.get("page_number"),
+                    "page_window_size": len(window),
+                    "extraction_method": "+".join(methods) if methods else "text",
+                },
+            )
+        )
+
+        if start_index + window_size >= total_pages:
+            break
+
+    return merged_documents
+
+
 def read_pdf_documents(path: Path) -> list[Document]:
     try:
         import pymupdf
@@ -93,7 +146,7 @@ def read_pdf_documents(path: Path) -> list[Document]:
 
     pdf = pymupdf.open(str(path))
     page_count = len(pdf)
-    documents = []
+    page_documents = []
     for page_index, page in enumerate(pdf, start=1):
         text = page.get_text("text", sort=True).strip()
         extraction_method = "text"
@@ -112,7 +165,7 @@ def read_pdf_documents(path: Path) -> list[Document]:
 
         if not text:
             continue
-        documents.append(
+        page_documents.append(
             Document(
                 page_content=text,
                 metadata={
@@ -126,7 +179,7 @@ def read_pdf_documents(path: Path) -> list[Document]:
             )
         )
     pdf.close()
-    return documents
+    return merge_pdf_page_documents(page_documents)
 
 
 def read_uploaded_text(path: Path) -> tuple[str, dict]:
