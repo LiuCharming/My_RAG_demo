@@ -320,6 +320,7 @@ LANGSMITH_API_KEY=your_key
 - 增加知识库删除、重命名、单文件删除功能
 - 主链路中移除硬编码 API key
 - 支持 `.env` / `.env.local` 自动加载
+- 性能面板（检索 / rerank / 生成耗时）
 
 ---
 
@@ -351,7 +352,6 @@ LANGSMITH_API_KEY=your_key
 ## 后续可继续扩展的方向
 
 - `docx` 上传
-- 性能面板（检索 / rerank / 生成耗时）
 - chunk 高亮
 - 表格型 PDF 的额外清洗
 - 页眉页脚清洗
