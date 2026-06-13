@@ -11,6 +11,11 @@ from sentence_transformers import CrossEncoder
 
 from ocr_support import extract_text_from_image_bytes
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional local env loading
+    load_dotenv = None
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HF_CACHE_DIR = PROJECT_ROOT / ".hf_cache"
@@ -30,7 +35,15 @@ class OCRRAGSettings:
     chat_model: str = "deepseek-v4-flash"
 
 
+def load_local_env() -> None:
+    if load_dotenv is None:
+        return
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    load_dotenv(PROJECT_ROOT / ".env.local", override=False)
+
+
 def ensure_env() -> None:
+    load_local_env()
     os.environ.setdefault("LANGSMITH_TRACING", "true")
     os.environ.setdefault("LANGSMITH_PROJECT", "ls-quickstart")
     if not os.environ.get("DEEPSEEK_API_KEY"):

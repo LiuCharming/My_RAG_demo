@@ -1,5 +1,6 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.documents import Document
@@ -14,6 +15,11 @@ try:
     import jieba
 except ImportError:  # pragma: no cover - fallback for environments without jieba
     jieba = None
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional local env loading
+    load_dotenv = None
 
 
 def tokenize_for_bm25(text: str) -> list[str]:
@@ -38,7 +44,17 @@ def load_documents_from_vector_store(vector_store) -> list[Document]:
         if page_content
     ]
 
+
+def load_local_env() -> None:
+    if load_dotenv is None:
+        return
+    project_root = Path(__file__).resolve().parent.parent
+    load_dotenv(project_root / ".env", override=False)
+    load_dotenv(project_root / ".env.local", override=False)
+
+
 def ensure_runtime_env() -> None:
+    load_local_env()
     os.environ.setdefault("LANGSMITH_TRACING", "true")
     os.environ.setdefault("LANGSMITH_PROJECT", "ls-quickstart")
     if not os.environ.get("DEEPSEEK_API_KEY"):

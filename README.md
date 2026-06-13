@@ -226,6 +226,20 @@ $env:LANGSMITH_API_KEY="your_key"
 
 也可以使用本地 `.env` 文件，但不要提交到 Git。
 
+推荐在项目根目录创建 `.env`：
+
+```env
+DEEPSEEK_API_KEY=your_key
+LANGSMITH_API_KEY=your_key
+```
+
+当前主链路和 OCR-RAG 都会自动尝试加载：
+
+- `.env`
+- `.env.local`
+
+因此本地开发时通常不需要每次手动重新设置环境变量。
+
 ---
 
 ## 启动方式

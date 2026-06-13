@@ -2,6 +2,7 @@ streamlit
 requests
 beautifulsoup4
 datasets
+python-dotenv
 
 langchain-core
 langchain-text-splitters
