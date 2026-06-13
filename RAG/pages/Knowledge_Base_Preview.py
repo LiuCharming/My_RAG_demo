@@ -1,7 +1,7 @@
 import streamlit as st
 
 from index_builder import get_chunks_cache_path, load_chunks_cache
-from knowledge_base import load_uploaded_documents
+from knowledge_base import list_uploaded_file_entries, load_uploaded_document_file
 from rag_service import (
     delete_file_from_custom_knowledge_base,
     delete_knowledge_base,
@@ -136,14 +136,11 @@ settings = make_settings(
 
 cache_path = get_chunks_cache_path(settings)
 chunks = load_chunks_cache(settings)
-uploaded_docs = []
+uploaded_files = []
 uploaded_docs_error = None
 if settings.uploaded_files_dir:
     try:
-        uploaded_docs = load_uploaded_documents(
-            settings.uploaded_files_dir,
-            strict_pdf=False,
-        )
+        uploaded_files = list_uploaded_file_entries(settings.uploaded_files_dir)
     except RuntimeError as exc:
         uploaded_docs_error = str(exc)
 
@@ -161,7 +158,7 @@ with left:
             "uploaded_files_dir": settings.uploaded_files_dir,
             "chunks_cache_path": str(cache_path),
             "chunk_count": len(chunks),
-            "uploaded_document_count": len(uploaded_docs),
+            "uploaded_document_count": len(uploaded_files),
         },
         expanded=True,
     )
@@ -169,19 +166,27 @@ with left:
     st.subheader("Files")
     if uploaded_docs_error:
         st.warning(uploaded_docs_error)
-    if not uploaded_docs:
+    if not uploaded_files:
         st.info("No uploaded files for this knowledge base.")
     else:
-        file_names = sorted(
-            {
-                doc.metadata.get("filename", "unknown")
-                for doc in uploaded_docs
-            }
-        )
+        file_names = [entry["filename"] for entry in uploaded_files]
         selected_file = st.selectbox("Uploaded files", options=file_names)
-        selected_docs = [
-            doc for doc in uploaded_docs if doc.metadata.get("filename") == selected_file
-        ]
+        selected_entry = next(
+            (entry for entry in uploaded_files if entry["filename"] == selected_file),
+            None,
+        )
+        selected_docs = []
+        if selected_entry:
+            try:
+                selected_docs = load_uploaded_document_file(
+                    selected_entry["source"],
+                    strict_pdf=False,
+                )
+            except RuntimeError as exc:
+                uploaded_docs_error = str(exc)
+
+        if uploaded_docs_error:
+            st.warning(uploaded_docs_error)
         if selected_docs:
             selected_doc = selected_docs[0]
             st.caption(selected_doc.metadata.get("source", ""))

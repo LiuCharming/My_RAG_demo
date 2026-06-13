@@ -193,6 +193,70 @@ def read_uploaded_text(path: Path) -> tuple[str, dict]:
     return "", {}
 
 
+def load_uploaded_document_file(path: str | Path, strict_pdf: bool = True) -> list[Document]:
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return []
+
+    suffix = file_path.suffix.lower()
+    if suffix not in {".txt", ".md", ".pdf"}:
+        return []
+
+    if suffix == ".pdf":
+        try:
+            return read_pdf_documents(file_path)
+        except RuntimeError:
+            if strict_pdf:
+                raise
+            return [
+                Document(
+                    page_content="PDF preview is unavailable because PyMuPDF is not installed.",
+                    metadata={
+                        "source": str(file_path),
+                        "filename": file_path.name,
+                        "file_type": "pdf",
+                        "preview_error": "missing_pymupdf",
+                    },
+                )
+            ]
+
+    text, extra_metadata = read_uploaded_text(file_path)
+    if not text:
+        return []
+    return [
+        Document(
+            page_content=text,
+            metadata={
+                "source": str(file_path),
+                "filename": file_path.name,
+                **extra_metadata,
+            },
+        )
+    ]
+
+
+def list_uploaded_file_entries(folder: str) -> list[dict]:
+    base = Path(folder)
+    if not base.exists():
+        return []
+
+    entries = []
+    for path in sorted(base.glob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
+            continue
+        entries.append(
+            {
+                "filename": path.name,
+                "source": str(path),
+                "file_type": path.suffix.lower().lstrip("."),
+                "size_bytes": path.stat().st_size,
+            }
+        )
+    return entries
+
+
 def load_uploaded_documents(folder: str, strict_pdf: bool = True) -> list[Document]:
     documents = []
     base = Path(folder)
@@ -200,43 +264,7 @@ def load_uploaded_documents(folder: str, strict_pdf: bool = True) -> list[Docume
         return documents
 
     for path in sorted(base.glob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in {".txt", ".md", ".pdf"}:
-            continue
-        if path.suffix.lower() == ".pdf":
-            try:
-                pdf_documents = read_pdf_documents(path)
-            except RuntimeError:
-                if strict_pdf:
-                    raise
-                pdf_documents = [
-                    Document(
-                        page_content="PDF preview is unavailable because PyMuPDF is not installed.",
-                        metadata={
-                            "source": str(path),
-                            "filename": path.name,
-                            "file_type": "pdf",
-                            "preview_error": "missing_pymupdf",
-                        },
-                    )
-                ]
-            documents.extend(pdf_documents)
-            continue
-
-        text, extra_metadata = read_uploaded_text(path)
-        if not text:
-            continue
-        documents.append(
-            Document(
-                page_content=text,
-                metadata={
-                    "source": str(path),
-                    "filename": path.name,
-                    **extra_metadata,
-                },
-            )
-        )
+        documents.extend(load_uploaded_document_file(path, strict_pdf=strict_pdf))
     return documents
 
 
