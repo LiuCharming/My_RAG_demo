@@ -1,4 +1,5 @@
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -163,21 +164,37 @@ class RAGPipeline:
             "retrieved_docs": prepared["retrieved_docs"],
             "candidate_docs": prepared["candidate_docs"],
             "rerank_scores": prepared["rerank_scores"],
+            "metrics": prepared.get("metrics", {}),
         }
     @traceable(run_type="chain")
     def prepare_answer(self, question: str) -> dict:
+        prepare_started_at = time.perf_counter()
+
+        retrieval_started_at = time.perf_counter()
         candidate_docs = self.retrieve(question)
+        retrieval_time = time.perf_counter() - retrieval_started_at
+
         if self.settings.use_rerank and self.reranker is not None:
+            rerank_started_at = time.perf_counter()
             reranked = self.rerank(question, candidate_docs)
+            rerank_time = time.perf_counter() - rerank_started_at
             retrieved_docs = [doc for doc, _ in reranked]
             rerank_scores = [float(score) for _, score in reranked]
         else:
             retrieved_docs = candidate_docs[: self.settings.rerank_k]
             rerank_scores = []
+            rerank_time = 0.0
+
+        prepare_time = time.perf_counter() - prepare_started_at
         return {
             "retrieved_docs": retrieved_docs,
             "candidate_docs": candidate_docs,
             "rerank_scores": rerank_scores,
+            "metrics": {
+                "retrieval_time": retrieval_time,
+                "rerank_time": rerank_time,
+                "prepare_time": prepare_time,
+            },
         }
     @traceable(metadata={"llm": "deepseek-v4-flash"})
     def stream_answer(self, question: str, retrieved_docs: list):

@@ -233,6 +233,7 @@ def ask_rag(
         "answer": result["answer"],
         "retrieved_docs": result["retrieved_docs"],
         "rerank_scores": result["rerank_scores"],
+        "metrics": result.get("metrics", {}),
         "config": {
             "collection_name": collection_name,
             "source_url": source_url,
@@ -286,6 +287,7 @@ def prepare_rag_response(
         "pipeline": pipeline,
         "retrieved_docs": prepared["retrieved_docs"],
         "rerank_scores": prepared["rerank_scores"],
+        "metrics": prepared.get("metrics", {}),
         "config": {
             "collection_name": collection_name,
             "source_url": source_url,

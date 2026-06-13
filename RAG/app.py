@@ -1,3 +1,5 @@
+import time
+
 import streamlit as st
 
 from rag_service import build_index, delete_knowledge_base, prepare_rag_response
@@ -163,6 +165,27 @@ with right:
     if st.session_state.last_config:
         st.json(st.session_state.last_config, expanded=True)
 
+    if st.session_state.last_metrics:
+        st.subheader("Performance")
+        metrics = st.session_state.last_metrics
+        metric_left, metric_right = st.columns(2)
+        metric_left.metric(
+            "Retrieval",
+            f"{metrics.get('retrieval_time', 0.0):.2f}s",
+        )
+        metric_right.metric(
+            "Rerank",
+            f"{metrics.get('rerank_time', 0.0):.2f}s",
+        )
+        metric_left.metric(
+            "Generation",
+            f"{metrics.get('generation_time', 0.0):.2f}s",
+        )
+        metric_right.metric(
+            "Total",
+            f"{metrics.get('total_time', 0.0):.2f}s",
+        )
+
     if not st.session_state.last_retrieved_docs:
         st.info("Evidence chunks will appear here after you ask a question.")
     else:
@@ -184,6 +207,7 @@ if prompt:
     uploads_target = UPLOADS_DIR / sanitize_name(collection_name)
     uploaded_files_dir = str(uploads_target) if uploads_target.exists() else None
     st.session_state.messages.append({"role": "user", "content": prompt})
+    request_started_at = time.perf_counter()
 
     with live_container:
         with st.chat_message("user"):
@@ -207,6 +231,7 @@ if prompt:
                     use_rerank=use_rerank,
                     rerank_k=rerank_k,
                 )
+            generation_started_at = time.perf_counter()
 
             message_placeholder = st.empty()
             full_response = ""
@@ -219,6 +244,11 @@ if prompt:
                 message_placeholder.markdown(full_response + "|")
 
             message_placeholder.markdown(full_response)
+            generation_time = time.perf_counter() - generation_started_at
+
+    base_metrics = dict(result.get("metrics", {}))
+    base_metrics["generation_time"] = generation_time
+    base_metrics["total_time"] = time.perf_counter() - request_started_at
 
     st.session_state.messages.append(
         {"role": "assistant", "content": full_response}
@@ -226,4 +256,5 @@ if prompt:
     st.session_state.last_retrieved_docs = result["retrieved_docs"]
     st.session_state.last_scores = result["rerank_scores"]
     st.session_state.last_config = result["config"]
+    st.session_state.last_metrics = base_metrics
     st.rerun()

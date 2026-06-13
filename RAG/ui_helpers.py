@@ -99,3 +99,6 @@ def ensure_chat_state(session_state) -> None:
 
     if "last_config" not in session_state:
         session_state.last_config = {}
+
+    if "last_metrics" not in session_state:
+        session_state.last_metrics = {}
