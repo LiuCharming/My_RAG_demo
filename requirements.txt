@@ -1,0 +1,23 @@
+streamlit
+requests
+beautifulsoup4
+datasets
+
+langchain-core
+langchain-text-splitters
+langchain-community
+langchain-chroma
+langchain-huggingface
+langchain-deepseek
+langsmith
+
+sentence-transformers
+chromadb
+jieba
+rank-bm25
+
+Pillow
+
+# Optional OCR backends
+# rapidocr_onnxruntime
+# pytesseract

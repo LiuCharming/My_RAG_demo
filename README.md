@@ -145,7 +145,19 @@ RAG/
 .\.venv\Scripts\python.exe
 ```
 
-### 2. 环境变量
+### 2. 安装依赖
+
+项目根目录下已经提供：
+
+- [requirements.txt](F:/ls-quickstart/requirements.txt)
+
+安装方式：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+### 3. 环境变量
 
 项目不再把 API key 写死在主链路代码中，运行前需要提供环境变量：
 
