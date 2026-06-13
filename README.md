@@ -148,20 +148,12 @@
 - 删除单个文件后自动重建索引
 - 上传新文件后重新构建知识库
 
-这部分主要集中在：
 
-- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
-- [F:\ls-quickstart\RAG\rag_service.py](F:\ls-quickstart\RAG\rag_service.py)
-- [F:\ls-quickstart\RAG\index_builder.py](F:\ls-quickstart\RAG\index_builder.py)
 
 ---
 
 ### 9. OCR-RAG
 
-相关文件：
-
-- [F:\ls-quickstart\RAG\OCR_RAG.py](F:\ls-quickstart\RAG\OCR_RAG.py)
-- [F:\ls-quickstart\RAG\ocr_support.py](F:\ls-quickstart\RAG\ocr_support.py)
 
 这部分用于图像文本识别与 OCR-RAG 实验，当前可以作为独立能力继续扩展。
 
