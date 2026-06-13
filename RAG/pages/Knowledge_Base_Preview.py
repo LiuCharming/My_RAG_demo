@@ -1,7 +1,6 @@
 import streamlit as st
 
-from index_builder import get_chunks_cache_path, load_chunks_cache
-from knowledge_base import list_uploaded_file_entries, load_uploaded_document_file
+from preview_helpers import load_preview_context, load_selected_file_preview
 from rag_service import (
     delete_file_from_custom_knowledge_base,
     delete_knowledge_base,
@@ -11,59 +10,9 @@ from rag_settings import (
     DEFAULT_DATASET_NAME,
     DEFAULT_DATASET_SPLIT,
     DEFAULT_SOURCE_URL,
-    RAGSettings,
-    UPLOADS_DIR,
     sanitize_name,
 )
-
-
-def list_custom_knowledge_bases() -> list[str]:
-    if not UPLOADS_DIR.exists():
-        return []
-    names = []
-    for path in sorted(UPLOADS_DIR.iterdir()):
-        if not path.is_dir():
-            continue
-        name = path.name
-        if name.startswith("custom_"):
-            name = name[len("custom_") :]
-        names.append(name)
-    return names
-
-
-def make_settings(
-    source_type: str,
-    source_url: str,
-    custom_source_name: str | None,
-    dataset_name: str,
-    dataset_split: str,
-) -> RAGSettings:
-    if source_type == "custom":
-        collection_name = f"custom_{sanitize_name(custom_source_name or 'python_manual')}"
-        uploaded_files_dir = str(UPLOADS_DIR / sanitize_name(collection_name))
-        return RAGSettings(
-            collection_name=collection_name,
-            source_type="custom",
-            source_url=source_url,
-            uploaded_files_dir=uploaded_files_dir,
-            custom_source_name=custom_source_name,
-        )
-    if source_type == "dataset":
-        return RAGSettings(
-            collection_name=f"dataset_{sanitize_name(dataset_name)}_{sanitize_name(dataset_split)}",
-            source_type="dataset",
-            source_url=source_url,
-            dataset_name=dataset_name,
-            dataset_split=dataset_split,
-        )
-    uploaded_dir = UPLOADS_DIR / sanitize_name("web_demo")
-    uploaded_files_dir = str(uploaded_dir) if uploaded_dir.exists() else None
-    return RAGSettings(
-        collection_name="web_demo",
-        source_type="web",
-        source_url=source_url,
-        uploaded_files_dir=uploaded_files_dir,
-    )
+from ui_helpers import get_uploaded_files_dir, list_custom_knowledge_bases, make_settings
 
 
 st.set_page_config(page_title="Knowledge Base Preview", page_icon="K", layout="wide")
@@ -96,7 +45,7 @@ with st.sidebar:
                 options=existing_custom_bases,
             )
             collection_name = f"custom_{sanitize_name(custom_source_name or 'python_manual')}"
-            uploads_dir = str(UPLOADS_DIR / sanitize_name(collection_name))
+            uploads_dir = get_uploaded_files_dir(collection_name) or ""
             renamed_value = st.text_input(
                 "Rename knowledge base",
                 value=custom_source_name,
@@ -134,15 +83,11 @@ settings = make_settings(
     dataset_split=dataset_split,
 )
 
-cache_path = get_chunks_cache_path(settings)
-chunks = load_chunks_cache(settings)
-uploaded_files = []
-uploaded_docs_error = None
-if settings.uploaded_files_dir:
-    try:
-        uploaded_files = list_uploaded_file_entries(settings.uploaded_files_dir)
-    except RuntimeError as exc:
-        uploaded_docs_error = str(exc)
+preview_context = load_preview_context(settings)
+cache_path = preview_context["cache_path"]
+chunks = preview_context["chunks"]
+uploaded_files = preview_context["uploaded_files"]
+uploaded_docs_error = preview_context["uploaded_docs_error"]
 
 left, right = st.columns([1, 2], gap="large")
 
@@ -175,15 +120,9 @@ with left:
             (entry for entry in uploaded_files if entry["filename"] == selected_file),
             None,
         )
-        selected_docs = []
-        if selected_entry:
-            try:
-                selected_docs = load_uploaded_document_file(
-                    selected_entry["source"],
-                    strict_pdf=False,
-                )
-            except RuntimeError as exc:
-                uploaded_docs_error = str(exc)
+        selected_docs, file_preview_error = load_selected_file_preview(selected_entry)
+        if file_preview_error:
+            uploaded_docs_error = file_preview_error
 
         if uploaded_docs_error:
             st.warning(uploaded_docs_error)

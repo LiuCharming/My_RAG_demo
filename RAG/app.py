@@ -1,5 +1,4 @@
 import streamlit as st
-from pathlib import Path
 
 from rag_service import build_index, delete_knowledge_base, prepare_rag_response
 from rag_settings import (
@@ -9,33 +8,7 @@ from rag_settings import (
     UPLOADS_DIR,
     sanitize_name,
 )
-
-
-def list_custom_knowledge_bases() -> list[str]:
-    if not UPLOADS_DIR.exists():
-        return []
-    names = []
-    for path in sorted(UPLOADS_DIR.iterdir()):
-        if not path.is_dir():
-            continue
-        name = path.name
-        if name.startswith("custom_"):
-            name = name[len("custom_") :]
-        names.append(name)
-    return names
-
-
-def save_uploaded_files(uploaded_files, target_dir: Path) -> str | None:
-    if not uploaded_files:
-        return None
-    target_dir.mkdir(parents=True, exist_ok=True)
-    for existing in target_dir.glob("*"):
-        if existing.is_file():
-            existing.unlink()
-    for uploaded_file in uploaded_files:
-        target = target_dir / Path(uploaded_file.name).name
-        target.write_bytes(uploaded_file.getbuffer())
-    return str(target_dir)
+from ui_helpers import ensure_chat_state, list_custom_knowledge_bases, save_uploaded_files
 
 
 st.set_page_config(page_title="RAG System", page_icon="R", layout="wide")
@@ -166,26 +139,7 @@ with st.sidebar:
             )
         st.success(f"Index ready. Chunks: {len(build_result['splits'])}")
 
-
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "Hi, I am your RAG assistant. "
-                "Build the local index first, then ask a question."
-            ),
-        }
-    ]
-
-if "last_retrieved_docs" not in st.session_state:
-    st.session_state.last_retrieved_docs = []
-
-if "last_scores" not in st.session_state:
-    st.session_state.last_scores = []
-
-if "last_config" not in st.session_state:
-    st.session_state.last_config = {}
+ensure_chat_state(st.session_state)
 
 
 left, right = st.columns([2, 1], gap="large")
