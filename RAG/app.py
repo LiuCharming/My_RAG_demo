@@ -1,7 +1,7 @@
 import streamlit as st
 from pathlib import Path
 
-from rag_service import build_index, prepare_rag_response
+from rag_service import build_index, delete_knowledge_base, prepare_rag_response
 from rag_settings import (
     DEFAULT_DATASET_NAME,
     DEFAULT_DATASET_SPLIT,
@@ -95,6 +95,17 @@ with st.sidebar:
             help="Upload files to create or replace the corpus of this custom knowledge base. Supported: txt, md, pdf.",
         )
         collection_name = f"custom_{sanitize_name(custom_source_name)}"
+        if custom_mode == "Select existing" and custom_source_name:
+            if st.button("Delete knowledge base", use_container_width=True):
+                uploads_target = UPLOADS_DIR / sanitize_name(collection_name)
+                delete_knowledge_base(
+                    collection_name=collection_name,
+                    source_type="custom",
+                    uploaded_files_dir=str(uploads_target),
+                    custom_source_name=custom_source_name,
+                )
+                st.success(f"Deleted knowledge base: {custom_source_name}")
+                st.rerun()
     else:
         dataset_name = st.text_input(
             "Dataset name",

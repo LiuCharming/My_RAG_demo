@@ -120,10 +120,6 @@
 
 ### 7. 知识库预览页面
 
-预览页文件：
-
-- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
-
 支持：
 
 - 查看当前知识库概览
@@ -139,16 +135,6 @@
 - 命中了哪些内容
 - PDF 解析出来的文本是否可用
 
----
-
-### 8. OCR-RAG
-
-相关文件：
-
-- [F:\ls-quickstart\RAG\OCR_RAG.py](F:\ls-quickstart\RAG\OCR_RAG.py)
-- [F:\ls-quickstart\RAG\ocr_support.py](F:\ls-quickstart\RAG\ocr_support.py)
-
-这部分用于图像文本识别与 OCR-RAG 实验，当前可以作为独立能力继续扩展。
 
 ---
 

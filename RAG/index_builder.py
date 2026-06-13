@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -91,3 +92,23 @@ def rebuild_vector_store(settings: RAGSettings) -> dict:
         "vector_store": vector_store,
         "persist_directory": str(get_persist_directory()),
     }
+
+
+def delete_knowledge_base_storage(
+    settings: RAGSettings,
+    delete_uploads: bool = True,
+) -> None:
+    try:
+        vector_store = load_vector_store(settings)
+        vector_store.delete_collection()
+    except Exception:
+        pass
+
+    cache_path = get_chunks_cache_path(settings)
+    if cache_path.exists():
+        cache_path.unlink()
+
+    if delete_uploads and settings.uploaded_files_dir:
+        uploads_dir = Path(settings.uploaded_files_dir)
+        if uploads_dir.exists():
+            shutil.rmtree(uploads_dir, ignore_errors=True)

@@ -2,6 +2,11 @@ import streamlit as st
 
 from index_builder import get_chunks_cache_path, load_chunks_cache
 from knowledge_base import load_uploaded_documents
+from rag_service import (
+    delete_file_from_custom_knowledge_base,
+    delete_knowledge_base,
+    rename_custom_knowledge_base,
+)
 from rag_settings import (
     DEFAULT_DATASET_NAME,
     DEFAULT_DATASET_SPLIT,
@@ -90,6 +95,30 @@ with st.sidebar:
                 "Custom knowledge base",
                 options=existing_custom_bases,
             )
+            collection_name = f"custom_{sanitize_name(custom_source_name or 'python_manual')}"
+            uploads_dir = str(UPLOADS_DIR / sanitize_name(collection_name))
+            renamed_value = st.text_input(
+                "Rename knowledge base",
+                value=custom_source_name,
+                help="Enter a new name and click Rename to move this knowledge base.",
+            )
+            if st.button("Rename knowledge base", use_container_width=True):
+                if renamed_value.strip():
+                    rename_custom_knowledge_base(
+                        old_name=custom_source_name,
+                        new_name=renamed_value,
+                    )
+                    st.success(f"Renamed knowledge base to: {renamed_value}")
+                    st.rerun()
+            if st.button("Delete this knowledge base", use_container_width=True):
+                delete_knowledge_base(
+                    collection_name=collection_name,
+                    source_type="custom",
+                    uploaded_files_dir=uploads_dir,
+                    custom_source_name=custom_source_name,
+                )
+                st.success(f"Deleted knowledge base: {custom_source_name}")
+                st.rerun()
         else:
             custom_source_name = st.text_input(
                 "Custom knowledge base",
@@ -183,6 +212,20 @@ with left:
                 value=preview_text[:4000],
                 height=320,
             )
+            if (
+                settings.source_type == "custom"
+                and custom_source_name
+                and st.button("Delete this file", use_container_width=True)
+            ):
+                result = delete_file_from_custom_knowledge_base(
+                    custom_source_name=custom_source_name,
+                    filename=selected_file,
+                )
+                if result == "deleted_knowledge_base":
+                    st.success("Deleted the last file. The knowledge base was removed.")
+                else:
+                    st.success(f"Deleted file: {selected_file}")
+                st.rerun()
 
 with right:
     st.subheader("Chunk Preview")
