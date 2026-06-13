@@ -158,12 +158,15 @@ with left:
             st.caption(selected_doc.metadata.get("source", ""))
             file_type = selected_doc.metadata.get("file_type")
             page_count = selected_doc.metadata.get("page_count")
+            extraction_method = selected_doc.metadata.get("extraction_method")
             if file_type or page_count:
                 details = []
                 if file_type:
                     details.append(f"type: {file_type}")
                 if page_count:
                     details.append(f"pages: {page_count}")
+                if extraction_method:
+                    details.append(f"method: {extraction_method}")
                 st.caption(" | ".join(details))
 
             preview_text = "\n\n".join(
@@ -258,6 +261,8 @@ with right:
                 {
                     "index": index,
                     "chunk_id": chunk.metadata.get("chunk_id"),
+                    "page": chunk.metadata.get("page_number"),
+                    "method": chunk.metadata.get("extraction_method"),
                     "source": chunk.metadata.get("filename")
                     or chunk.metadata.get("dataset")
                     or chunk.metadata.get("source"),

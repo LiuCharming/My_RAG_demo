@@ -17,7 +17,7 @@ jieba
 rank-bm25
 
 Pillow
-pypdf
+PyMuPDF
 
 # Optional OCR backends
 # rapidocr_onnxruntime

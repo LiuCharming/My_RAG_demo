@@ -75,11 +75,20 @@ PDF upload is supported for both:
 - `web` mode uploads
 - `custom` knowledge-base uploads
 
-PDFs are parsed page by page. That means:
+PDFs are parsed with `PyMuPDF` and indexed page by page. That means:
 
 - each page can become its own source document
 - page-level metadata is preserved
 - preview can show file type and page count
+- reading order is usually better than a very light plain-text extractor
+- pages that look obviously garbled can fall back to OCR if an OCR backend is installed
+
+This is still not perfect for every company PDF, especially for:
+
+- dense tables
+- scanned files
+- complex two-column layouts
+- heavily designed documents
 
 This makes PDF retrieval easier to inspect and debug than treating the whole file as one giant block.
 
@@ -151,9 +160,14 @@ Install dependencies with:
 
 PDF upload requires:
 
-- `pypdf`
+- `PyMuPDF`
 
 This is already included in `requirements.txt`.
+
+For OCR fallback on difficult PDF pages, install at least one OCR backend:
+
+- `rapidocr_onnxruntime`
+- `pytesseract`
 
 ## Environment variables
 
@@ -217,6 +231,8 @@ Recent work included:
 - knowledge-base preview page
 - chunk search and source filtering
 - PDF upload support
+- PDF parsing upgraded to PyMuPDF
+- OCR fallback for garbled PDF pages
 - page-level PDF metadata
 - removal of hardcoded API keys from the main RAG path
 
