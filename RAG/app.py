@@ -2,7 +2,13 @@ import streamlit as st
 from pathlib import Path
 
 from rag_service import build_index, prepare_rag_response
-from rag_settings import DEFAULT_SOURCE_URL, UPLOADS_DIR, sanitize_name
+from rag_settings import (
+    DEFAULT_DATASET_NAME,
+    DEFAULT_DATASET_SPLIT,
+    DEFAULT_SOURCE_URL,
+    UPLOADS_DIR,
+    sanitize_name,
+)
 
 
 def list_custom_knowledge_bases() -> list[str]:
@@ -49,6 +55,8 @@ with st.sidebar:
     collection_name = "rag_demo"
     custom_source_name = None
     source_url = DEFAULT_SOURCE_URL
+    dataset_name = DEFAULT_DATASET_NAME
+    dataset_split = DEFAULT_DATASET_SPLIT
     uploaded_files = []
     if source_type == "web":
         source_url = st.text_input("Web article URL", value=DEFAULT_SOURCE_URL)
@@ -88,7 +96,17 @@ with st.sidebar:
         )
         collection_name = f"custom_{sanitize_name(custom_source_name)}"
     else:
-        collection_name = "cmrc2018"
+        dataset_name = st.text_input(
+            "Dataset name",
+            value=DEFAULT_DATASET_NAME,
+            help="For example: hfl/cmrc2018",
+        )
+        dataset_split = st.text_input(
+            "Dataset split",
+            value=DEFAULT_DATASET_SPLIT,
+            help="For example: train, test, validation",
+        )
+        collection_name = f"dataset_{sanitize_name(dataset_name)}_{sanitize_name(dataset_split)}"
     chunk_size = st.slider(
         "Chunk size",
         min_value=300,
@@ -126,6 +144,8 @@ with st.sidebar:
                 source_url=source_url,
                 uploaded_files_dir=uploaded_files_dir,
                 custom_source_name=custom_source_name,
+                dataset_name=dataset_name,
+                dataset_split=dataset_split,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 retrieval_mode=retrieval_mode,
@@ -213,6 +233,8 @@ if prompt:
                     source_url=source_url,
                     uploaded_files_dir=uploaded_files_dir,
                     custom_source_name=custom_source_name,
+                    dataset_name=dataset_name,
+                    dataset_split=dataset_split,
                     chunk_size=chunk_size,
                     chunk_overlap=chunk_overlap,
                     retrieval_mode=retrieval_mode,

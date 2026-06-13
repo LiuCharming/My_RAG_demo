@@ -2,7 +2,14 @@ import streamlit as st
 
 from index_builder import get_chunks_cache_path, load_chunks_cache
 from knowledge_base import load_uploaded_documents
-from rag_settings import DEFAULT_SOURCE_URL, RAGSettings, UPLOADS_DIR, sanitize_name
+from rag_settings import (
+    DEFAULT_DATASET_NAME,
+    DEFAULT_DATASET_SPLIT,
+    DEFAULT_SOURCE_URL,
+    RAGSettings,
+    UPLOADS_DIR,
+    sanitize_name,
+)
 
 
 def list_custom_knowledge_bases() -> list[str]:
@@ -23,6 +30,8 @@ def make_settings(
     source_type: str,
     source_url: str,
     custom_source_name: str | None,
+    dataset_name: str,
+    dataset_split: str,
 ) -> RAGSettings:
     if source_type == "custom":
         collection_name = f"custom_{sanitize_name(custom_source_name or 'python_manual')}"
@@ -36,9 +45,11 @@ def make_settings(
         )
     if source_type == "dataset":
         return RAGSettings(
-            collection_name="cmrc2018",
+            collection_name=f"dataset_{sanitize_name(dataset_name)}_{sanitize_name(dataset_split)}",
             source_type="dataset",
             source_url=source_url,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
         )
     uploaded_dir = UPLOADS_DIR / sanitize_name("web_demo")
     uploaded_files_dir = str(uploaded_dir) if uploaded_dir.exists() else None
@@ -64,9 +75,14 @@ with st.sidebar:
     )
     source_url = DEFAULT_SOURCE_URL
     custom_source_name = None
+    dataset_name = DEFAULT_DATASET_NAME
+    dataset_split = DEFAULT_DATASET_SPLIT
 
     if source_type == "web":
         source_url = st.text_input("Web article URL", value=DEFAULT_SOURCE_URL)
+    elif source_type == "dataset":
+        dataset_name = st.text_input("Dataset name", value=DEFAULT_DATASET_NAME)
+        dataset_split = st.text_input("Dataset split", value=DEFAULT_DATASET_SPLIT)
     elif source_type == "custom":
         existing_custom_bases = list_custom_knowledge_bases()
         if existing_custom_bases:
@@ -85,6 +101,8 @@ settings = make_settings(
     source_type=source_type,
     source_url=source_url,
     custom_source_name=custom_source_name,
+    dataset_name=dataset_name,
+    dataset_split=dataset_split,
 )
 
 cache_path = get_chunks_cache_path(settings)
@@ -102,6 +120,8 @@ with left:
             "collection_name": settings.collection_name,
             "source_type": settings.source_type,
             "source_url": settings.source_url,
+            "dataset_name": settings.dataset_name,
+            "dataset_split": settings.dataset_split,
             "uploaded_files_dir": settings.uploaded_files_dir,
             "chunks_cache_path": str(cache_path),
             "chunk_count": len(chunks),
