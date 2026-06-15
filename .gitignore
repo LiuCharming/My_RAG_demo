@@ -19,6 +19,8 @@ Thumbs.db
 .env
 .env.local
 .env.*
+huggingface_models/
+RAG/uploads/
 
 LangChain/
 LangSmith/

@@ -1,0 +1,16 @@
+services:
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ls-quickstart
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./vector_db:/app/vector_db
+      - ./RAG/uploads:/app/RAG/uploads
+      - ./huggingface_models:/app/huggingface_models
+      - ./.hf_cache:/app/.hf_cache
+    restart: unless-stopped

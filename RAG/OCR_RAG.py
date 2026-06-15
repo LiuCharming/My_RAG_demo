@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - optional local env loading
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HF_CACHE_DIR = PROJECT_ROOT / ".hf_cache"
-MODEL_CACHE_DIR = Path("F:/huggingface_models")
+MODEL_CACHE_DIR = PROJECT_ROOT / "huggingface_models"
 OCR_VECTOR_DB_DIR = PROJECT_ROOT / "vector_db" / "ocr_chroma"
 
 
