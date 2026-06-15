@@ -329,7 +329,10 @@ class RAGPipeline:
     def ask(self, question: str, chat_history: list[dict] | None = None) -> dict:
         prepared = self.prepare_answer(question, chat_history=chat_history)
         full_answer = "".join(
-            self.stream_answer(question, prepared["retrieved_docs"])
+            self.stream_answer(
+                prepared.get("rewritten_question", question),
+                prepared["retrieved_docs"],
+            )
         )
         return {
             "answer": full_answer,

@@ -254,8 +254,9 @@ if prompt:
             message_placeholder = st.empty()
             full_response = ""
 
+            answer_question = result.get("rewritten_question", prompt)
             for text in result["pipeline"].stream_answer(
-                prompt,
+                answer_question,
                 result["retrieved_docs"],
             ):
                 full_response += text
