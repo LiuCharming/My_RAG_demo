@@ -4,8 +4,8 @@
 
 这个项目当前主要解决两件事：
 
-1. 做一个可以直接交互使用的本地 RAG 问答页面  
-2. 做一个可以预览、检查、调试和编辑知识库内容的本地工具
+1. 提供一个可直接交互使用的本地 RAG 问答页面
+2. 提供一个可预览、检查、调试和编辑知识库内容的本地工具
 
 ---
 
@@ -21,8 +21,6 @@
 - 展示 rerank 分数
 - 切换不同知识源
 
----
-
 ### 2. 三种检索模式
 
 当前支持：
@@ -31,24 +29,18 @@
 - `bm25`
 - `hybrid`
 
-大致区别：
+区别大致如下：
 
 - `vector`：更偏语义检索
 - `bm25`：更偏关键词匹配
 - `hybrid`：结合两者结果
 
----
-
 ### 3. Rerank 开关
 
-页面中可以直接打开或关闭 rerank，用来比较：
+页面中可以直接打开或关闭 rerank，用于比较：
 
 - 召回后直接回答
 - 召回后再重排再回答
-
-这对效果对比和性能调试都很有帮助。
-
----
 
 ### 4. 多种知识源
 
@@ -57,8 +49,6 @@
 - `web`：网页文章或上传的本地文件
 - `dataset`：Hugging Face 数据集
 - `custom`：自定义命名知识库
-
----
 
 ### 5. 自定义知识库
 
@@ -74,25 +64,18 @@
 - `md`
 - `pdf`
 
-不同知识库会按名字隔离存放，互不混淆。
-
----
+不同知识库会按名字隔离存储，互不污染。
 
 ### 6. PDF 上传与解析
 
-当前 PDF 流程已经升级过，支持：
+当前 PDF 流程支持：
 
-- `web` 模式上传 PDF
-- `custom` 模式上传 PDF
-
-处理逻辑是：
-
-1. 先用 `PyMuPDF` 提取 PDF 文本  
-2. 如果某一页看起来明显乱码，就自动尝试 OCR fallback  
-3. 文本先按页提取，再做跨页合并  
+1. 先用 `PyMuPDF` 提取 PDF 文本
+2. 如果某页文本明显乱码，自动尝试 OCR fallback
+3. 文本先按页提取，再做跨页合并
 4. 合并后的内容再进入 chunk 切分
 
-当前会保留这些元数据：
+保留的元数据包括：
 
 - `page_start`
 - `page_end`
@@ -100,25 +83,11 @@
 - `page_window_size`
 - `extraction_method`
 
-这比“整本 PDF 当一块”或者“严格按页硬切”都更适合做检索。
-
-#### 目前仍然可能不完美的 PDF 场景
-
-尤其是下面这些公司文档，仍然可能出现效果一般的情况：
-
-- 双栏排版
-- 表格很多
-- 扫描件
-- 页眉页脚重复严重
-- 字体编码不标准
-
----
-
-### 7. 知识库预览页面
+### 7. 知识库预览页
 
 预览页文件：
 
-- [F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py](F:\ls-quickstart\RAG\pages\Knowledge_Base_Preview.py)
+- [Knowledge_Base_Preview.py](/F:/ls-quickstart/RAG/pages/Knowledge_Base_Preview.py)
 
 支持：
 
@@ -129,18 +98,9 @@
 - 按文件过滤 chunk
 - 查看 chunk 页码范围和提取方式
 
-为了减少卡顿，预览页现在做了按需加载：
+### 8. 知识库编辑能力
 
-- 进入页面时先只读取文件列表
-- 只有选中某个文件时，才解析这个文件的内容
-
-这对包含大 PDF 的知识库会明显更轻。
-
----
-
-### 8. 知识库编辑功能
-
-当前已经支持一版基础的知识库编辑能力：
+当前支持：
 
 - 删除整个自定义知识库
 - 重命名自定义知识库
@@ -148,14 +108,85 @@
 - 删除单个文件后自动重建索引
 - 上传新文件后重新构建知识库
 
+### 9. OCR-RAG
 
+`OCR_RAG.py` 这一部分用于图像文本识别与 OCR-RAG 实验，可作为独立能力继续扩展。
 
 ---
 
-### 9. OCR-RAG
+## 最近新增的重要改动
 
+这版相较于之前，补充了下面这些关键更新：
 
-这部分用于图像文本识别与 OCR-RAG 实验，当前可以作为独立能力继续扩展。
+### 1. Docker 容器化部署
+
+项目已增加：
+
+- [Dockerfile](/F:/ls-quickstart/Dockerfile)
+- [docker-compose.yml](/F:/ls-quickstart/docker-compose.yml)
+- [.dockerignore](/F:/ls-quickstart/.dockerignore)
+
+这样可以直接在本地或服务器上用 Docker 运行。
+
+### 2. 跨平台模型缓存目录
+
+之前模型缓存目录写死为 Windows 路径，现在已经改成项目内相对路径：
+
+- `huggingface_models/`
+- `.hf_cache/`
+
+这样在 Windows 和 CentOS 上都可以直接运行。
+
+### 3. 启动阶段预热模型
+
+页面第一次打开时会执行运行时预热，提前加载：
+
+- embedding
+- 主问答模型
+- 本地重写模型
+- reranker
+
+这样第一次真正提问时的冷启动会明显减少。
+
+### 4. 多轮问题改写改成“一步式”
+
+当前不再采用“先判别、再改写”的两步流程，而是：
+
+- 从第二轮开始，直接根据当前活跃历史生成“最终检索问题”
+- 如果当前问题已经完整，模型会原样返回
+- 如果问题依赖上下文，模型会直接输出改写后的独立问题
+
+### 5. 保留滑动窗口式历史
+
+当前多轮历史不是固定死取最近几轮，而是维护一个“活跃上下文窗口”：
+
+- 第一次提问：不做改写
+- 第二次开始：结合活跃上下文决定最终检索问题
+- 如果这次没有改写：把这轮问答当成新的独立起点，截断更早历史
+- 如果这次发生改写：保留当前上下文继续往后滚动
+
+这样既保留多轮能力，也避免历史越积越多造成串话。
+
+### 6. 生成答案时使用改写后的检索问题
+
+当前生成阶段会使用改写后的问题，而不是继续使用原始追问。
+
+这修复了这样一种问题：
+
+- 检索已经改写成功
+- chunk 里也已经有答案
+- 但生成时还拿原始“它 / 这个 / 那个”去问模型
+- 导致回答成“上下文不明确”
+
+现在这条链路已经统一。
+
+### 7. 本地重写模型
+
+当前默认使用本地小模型做多轮问题改写：
+
+- `Qwen/Qwen2.5-0.5B-Instruct`
+
+用于把依赖上下文的追问改写成更适合检索的独立问题。
 
 ---
 
@@ -167,6 +198,9 @@
 README.md
 requirements.txt
 .gitignore
+Dockerfile
+docker-compose.yml
+.dockerignore
 RAG/
   app.py
   rag_settings.py
@@ -176,6 +210,7 @@ RAG/
   rag_service.py
   ocr_support.py
   OCR_RAG.py
+  ui_helpers.py
   pages/
     Knowledge_Base_Preview.py
 ```
@@ -184,72 +219,65 @@ RAG/
 
 - `app.py`：主聊天页面
 - `rag_settings.py`：全局配置与路径
-- `knowledge_base.py`：知识源加载、PDF 处理、文档切分前整理
+- `knowledge_base.py`：知识源加载、PDF 处理、切分前清理
 - `index_builder.py`：构建本地向量库与 chunk cache
-- `rag_pipeline.py`：检索、BM25、hybrid、rerank、生成
+- `rag_pipeline.py`：问题改写、检索、重排、答案生成
 - `rag_service.py`：页面调用的统一服务层
+- `ui_helpers.py`：页面状态与上传辅助逻辑
 - `Knowledge_Base_Preview.py`：知识库预览、搜索与编辑
 
 ---
 
 ## 安装依赖
 
-建议使用项目中的虚拟环境。
-
-安装方式：
+建议使用虚拟环境。
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-其中 PDF 处理依赖：
+PDF 处理依赖：
 
 - `PyMuPDF`
 
-当前已经写进 `requirements.txt`。
-
-如果你希望 PDF 中乱码页能自动 OCR fallback，建议额外安装至少一个 OCR 后端：
+如果需要 OCR fallback，建议额外安装至少一种 OCR 后端：
 
 - `rapidocr_onnxruntime`
 - `pytesseract`
+
+如果你要启用本地 `Qwen2.5-0.5B-Instruct` 做问题改写，请确认环境中可用：
+
+- `transformers`
+- `torch`
 
 ---
 
 ## 环境变量
 
-主链路代码里不再写死 API key。
-
-运行前请设置：
+运行前请配置：
 
 - `DEEPSEEK_API_KEY`
 - `LANGSMITH_API_KEY`（如果需要 LangSmith tracing）
 
-PowerShell 示例：
-
-```powershell
-$env:DEEPSEEK_API_KEY="your_key"
-$env:LANGSMITH_API_KEY="your_key"
-```
-
-也可以使用本地 `.env` 文件，但不要提交到 Git。
-
-推荐在项目根目录创建：
+示例：
 
 ```env
 DEEPSEEK_API_KEY=your_key
 LANGSMITH_API_KEY=your_key
 ```
 
-当前主链路和 OCR-RAG 都会自动尝试加载：
+项目会自动尝试加载：
 
 - `.env`
 - `.env.local`
 
-因此本地开发时通常不需要每次手动重新设置环境变量。
+不要把这些文件提交到 Git。
 
 ---
 
 ## 启动方式
+
+### 本地 Python 运行
 
 ```powershell
 .\.venv\Scripts\python.exe -m streamlit run .\RAG\app.py --server.fileWatcherType none --server.headless true
@@ -258,6 +286,35 @@ LANGSMITH_API_KEY=your_key
 启动后访问：
 
 - [http://localhost:8501](http://localhost:8501)
+
+### Docker 运行
+
+```powershell
+docker compose up --build
+```
+
+后台运行：
+
+```powershell
+docker compose up -d --build
+```
+
+---
+
+## Docker 部署说明
+
+当前 `docker-compose.yml` 会挂载这些目录：
+
+- `./vector_db:/app/vector_db`
+- `./RAG/uploads:/app/RAG/uploads`
+- `./huggingface_models:/app/huggingface_models`
+- `./.hf_cache:/app/.hf_cache`
+
+这样容器重建后：
+
+- 向量库不会丢
+- 上传文件不会丢
+- Hugging Face 模型缓存不会重复下载
 
 ---
 
@@ -274,13 +331,16 @@ LANGSMITH_API_KEY=your_key
 
 1. 完成建库
 2. 在聊天框输入问题
-3. 右侧查看证据 chunk 和 rerank 分数
+3. 右侧查看证据 chunk、rerank 分数、检索配置和性能信息
 
-### 预览知识库
+### 多轮追问
 
-1. 从主页面跳到知识库预览页
-2. 选择相同知识源
-3. 查看文件内容、chunk、搜索结果和页范围
+当前多轮追问流程如下：
+
+1. 第一轮通常直接检索
+2. 第二轮开始结合活跃上下文生成最终检索问题
+3. 如果当前问题本身完整，就原样检索
+4. 如果当前问题依赖前文，就自动改写后再检索
 
 ### 编辑知识库
 
@@ -293,26 +353,21 @@ LANGSMITH_API_KEY=your_key
 
 ---
 
-## 最近这版做过的改动
+## 服务器部署建议
 
-当前已经完成的重点改动包括：
+推荐流程：
 
-- 支持 `vector / bm25 / hybrid`
-- 为 BM25 增加中文分词支持
-- 增加 rerank 开关
-- 支持自定义知识库创建与切换
-- 增加知识库预览页
-- 支持 chunk 搜索与按文件过滤
-- 支持 PDF 上传
-- PDF 解析升级到 `PyMuPDF`
-- 为乱码页增加 OCR fallback
-- PDF 内容从按页提取升级为跨页合并后再切分
-- 保留页级与页范围 metadata
-- 预览页改为按需加载文件内容，减少首屏卡顿
-- 增加知识库删除、重命名、单文件删除功能
-- 主链路中移除硬编码 API key
-- 支持 `.env` / `.env.local` 自动加载
-- 性能面板（检索 / rerank / 生成耗时）
+1. Windows 本地开发和测试
+2. 推送到 Gitee 私有仓库
+3. CentOS 服务器拉代码
+4. 服务器执行 `docker compose up -d --build`
+
+如果后续更新代码：
+
+```bash
+git pull
+sudo docker compose up -d --build
+```
 
 ---
 
@@ -324,20 +379,23 @@ LANGSMITH_API_KEY=your_key
 - API key
 - 模型缓存
 - 向量库缓存
+- 上传文件目录
 
-当前 `.gitignore` 已忽略：
+当前建议忽略的目录包括：
 
 - `.venv/`
 - `.hf_cache/`
+- `huggingface_models/`
 - `vector_db/`
+- `RAG/uploads/`
 - `__pycache__/`
 - `.env`
 
-如果 key 曾经进入过 Git 历史，请默认它已经泄露：
+如果 key 曾经进入 Git 历史，请默认它已经泄露：
 
-1. 立刻更换 key
+1. 立即更换 key
 2. 停用旧 key
-3. 必要时清理本地 Git 历史后再 push
+3. 必要时清理 Git 历史后再 push
 
 ---
 
@@ -346,9 +404,9 @@ LANGSMITH_API_KEY=your_key
 - `docx` 上传
 - chunk 高亮
 - 表格型 PDF 的额外清洗
-- 页眉页脚清洗
+- 页眉页脚清理
 - 更细粒度的知识库编辑
-- Docker 部署
+- 更丰富的多轮改写调试信息
 
 ---
 
