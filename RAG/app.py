@@ -249,6 +249,10 @@ if prompt:
     uploads_target = UPLOADS_DIR / sanitize_name(collection_name)
     uploaded_files_dir = str(uploads_target) if uploads_target.exists() else None
     active_chat_history = list(st.session_state.rewrite_context_messages)
+    if st.session_state.rewrite_topic_anchor and not active_chat_history:
+        active_chat_history.append(
+            {"role": "user", "content": st.session_state.rewrite_topic_anchor}
+        )
     active_chat_history.append({"role": "user", "content": prompt})
     st.session_state.messages.append({"role": "user", "content": prompt})
     request_started_at = time.perf_counter()
@@ -312,8 +316,17 @@ if prompt:
         {"role": "assistant", "content": full_response},
     ]
     if result.get("rewrite_decision", "").startswith("rewrite"):
-        updated_context = active_chat_history + [{"role": "assistant", "content": full_response}]
-        st.session_state.rewrite_context_messages = updated_context[-6:]
+        user_only_context = [
+            message
+            for message in active_chat_history
+            if message.get("role") == "user"
+        ]
+        st.session_state.rewrite_context_messages = user_only_context[-6:]
+        if not st.session_state.rewrite_topic_anchor:
+            st.session_state.rewrite_topic_anchor = (
+                user_only_context[0]["content"] if user_only_context else prompt
+            )
     else:
-        st.session_state.rewrite_context_messages = latest_pair
+        st.session_state.rewrite_context_messages = [{"role": "user", "content": prompt}]
+        st.session_state.rewrite_topic_anchor = prompt
     st.rerun()
