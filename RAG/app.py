@@ -26,6 +26,7 @@ st.caption("Local vector database, retrieval, reranking, and answer generation."
 
 
 with st.sidebar:
+    settings_defaults = RAGSettings()
     st.subheader("Index Settings")
     source_type = st.selectbox(
         "Knowledge source",
@@ -115,11 +116,15 @@ with st.sidebar:
     )
 
     st.subheader("Retrieval Settings")
+    answer_model_labels = {
+        "deepseek_api": f"DeepSeek API ({settings_defaults.chat_model})",
+        "local_qwen": f"Local Qwen ({settings_defaults.local_chat_model})",
+    }
     chat_backend = st.selectbox(
         "Answer model",
         options=["deepseek_api", "local_qwen"],
         index=0,
-        format_func=lambda value: "DeepSeek API" if value == "deepseek_api" else "Local Qwen2.5-0.5B",
+        format_func=lambda value: answer_model_labels.get(value, value),
     )
     retrieval_mode = st.selectbox(
         "Retrieval mode",
@@ -177,6 +182,20 @@ with right:
     )
     if st.session_state.last_config:
         st.json(st.session_state.last_config, expanded=True)
+        actual_chat_backend = st.session_state.last_config.get("chat_backend", settings_defaults.chat_backend)
+        actual_chat_model = (
+            settings_defaults.local_chat_model
+            if actual_chat_backend == "local_qwen"
+            else settings_defaults.chat_model
+        )
+        actual_rewrite_model = (
+            settings_defaults.local_rewrite_model
+            if settings_defaults.use_local_rewrite_model
+            else settings_defaults.chat_model
+        )
+        st.caption(f"Chat backend: {actual_chat_backend}")
+        st.caption(f"Chat model: {actual_chat_model}")
+        st.caption(f"Rewrite model: {actual_rewrite_model}")
 
     rewrite_used = bool(st.session_state.last_metrics.get("rewrite_used")) if st.session_state.last_metrics else False
     if rewrite_used and st.session_state.last_rewritten_question:
