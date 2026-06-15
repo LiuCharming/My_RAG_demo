@@ -48,16 +48,33 @@ def get_pipeline(
 @lru_cache(maxsize=1)
 def warmup_runtime() -> dict:
     from index_builder import create_embeddings
-    from rag_pipeline import get_llm, get_reranker
+    from rag_pipeline import (
+        get_llm,
+        get_local_rewrite_classifier,
+        get_reranker,
+        get_rewrite_judge_llm,
+    )
 
     settings = RAGSettings()
     create_embeddings(settings)
     get_llm(settings.chat_model)
+    if settings.use_local_rewrite_classifier:
+        try:
+            get_local_rewrite_classifier(settings.local_rewrite_classifier_model)
+        except Exception:
+            get_rewrite_judge_llm(settings.rewrite_judge_model)
+    else:
+        get_rewrite_judge_llm(settings.rewrite_judge_model)
     if settings.use_rerank:
         get_reranker(settings.reranker_model)
     return {
         "embedding_model": settings.embedding_model,
         "chat_model": settings.chat_model,
+        "rewrite_judge_model": (
+            settings.local_rewrite_classifier_model
+            if settings.use_local_rewrite_classifier
+            else settings.rewrite_judge_model
+        ),
         "reranker_model": settings.reranker_model if settings.use_rerank else None,
     }
 
@@ -252,6 +269,8 @@ def ask_rag(
         "retrieved_docs": result["retrieved_docs"],
         "rerank_scores": result["rerank_scores"],
         "rewritten_question": result.get("rewritten_question", question),
+        "rewrite_used": result.get("rewrite_used", False),
+        "rewrite_decision": result.get("rewrite_decision", "skip_no_history"),
         "metrics": result.get("metrics", {}),
         "config": {
             "collection_name": collection_name,
@@ -308,6 +327,8 @@ def prepare_rag_response(
         "retrieved_docs": prepared["retrieved_docs"],
         "rerank_scores": prepared["rerank_scores"],
         "rewritten_question": prepared.get("rewritten_question", question),
+        "rewrite_used": prepared.get("rewrite_used", False),
+        "rewrite_decision": prepared.get("rewrite_decision", "skip_no_history"),
         "metrics": prepared.get("metrics", {}),
         "config": {
             "collection_name": collection_name,

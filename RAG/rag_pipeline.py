@@ -10,7 +10,7 @@ from langsmith import traceable
 from sentence_transformers import CrossEncoder
 
 from index_builder import load_chunks_cache, load_vector_store
-from rag_settings import MODEL_CACHE_DIR, RAGSettings
+from rag_settings import HF_CACHE_DIR, MODEL_CACHE_DIR, RAGSettings
 
 try:
     import jieba
@@ -21,6 +21,14 @@ try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - optional local env loading
     load_dotenv = None
+
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+except ImportError:  # pragma: no cover - optional local rewrite classifier
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
 
 
 def tokenize_for_bm25(text: str) -> list[str]:
@@ -55,77 +63,21 @@ def ensure_runtime_env() -> None:
     load_local_env()
     os.environ.setdefault("LANGSMITH_TRACING", "true")
     os.environ.setdefault("LANGSMITH_PROJECT", "ls-quickstart")
+    os.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))
+    os.environ.setdefault("HF_DATASETS_CACHE", str(HF_CACHE_DIR / "datasets"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(HF_CACHE_DIR / "hub"))
     if not os.environ.get("DEEPSEEK_API_KEY"):
         raise ValueError("DEEPSEEK_API_KEY is not set.")
 
 
-def should_rewrite_question(question: str, chat_history: list[dict] | None = None) -> bool:
-    text = (question or "").strip()
-    if not text or not chat_history:
-        return False
-
-    normalized_history = [
+def normalize_chat_history(chat_history: list[dict] | None) -> list[dict]:
+    return [
         message
-        for message in chat_history
+        for message in chat_history or []
         if isinstance(message, dict)
         and message.get("role") in {"user", "assistant"}
         and str(message.get("content", "")).strip()
     ]
-    if len(normalized_history) < 2:
-        return False
-
-    lower_text = text.lower()
-    contextual_markers = (
-        "它",
-        "他",
-        "她",
-        "这个",
-        "那个",
-        "这些",
-        "那些",
-        "上述",
-        "上面",
-        "前面",
-        "刚才",
-        "之前",
-        "这里",
-        "其",
-        "该",
-        "that",
-        "this",
-        "these",
-        "those",
-        "it",
-        "they",
-        "them",
-        "previous",
-        "earlier",
-        "former",
-        "latter",
-        "above",
-    )
-    if any(marker in text for marker in contextual_markers):
-        return True
-    if any(f" {marker} " in f" {lower_text} " for marker in contextual_markers):
-        return True
-
-    if len(text) <= 12:
-        return True
-
-    follow_up_starts = (
-        "那",
-        "那么",
-        "然后",
-        "所以",
-        "继续",
-        "再",
-        "and ",
-        "so ",
-        "then ",
-        "what about",
-        "how about",
-    )
-    return text.startswith(follow_up_starts) or lower_text.startswith(follow_up_starts)
 
 
 @lru_cache(maxsize=8)
@@ -142,6 +94,76 @@ def get_llm(model_name: str) -> ChatDeepSeek:
         timeout=300,
         max_tokens=5000,
     )
+
+
+@lru_cache(maxsize=4)
+def get_rewrite_judge_llm(model_name: str) -> ChatDeepSeek:
+    ensure_runtime_env()
+    return ChatDeepSeek(
+        model=model_name,
+        temperature=0,
+        timeout=120,
+        max_tokens=8,
+    )
+
+
+@lru_cache(maxsize=2)
+def get_local_rewrite_classifier(model_name: str):
+    if AutoTokenizer is None or AutoModelForCausalLM is None or torch is None:
+        raise RuntimeError("transformers or torch is not installed.")
+
+    ensure_runtime_env()
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=str(MODEL_CACHE_DIR),
+        local_files_only=False,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        cache_dir=str(MODEL_CACHE_DIR),
+        torch_dtype="auto",
+        device_map="auto",
+        local_files_only=False,
+    )
+    return tokenizer, model
+
+
+def run_local_rewrite_decision(
+    model_name: str,
+    history_text: str,
+    question: str,
+) -> str:
+    tokenizer, model = get_local_rewrite_classifier(model_name)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个查询改写判别器。"
+                "只判断当前问题是否依赖对话上下文。"
+                "如果必须结合前文才能检索，输出 rewrite。"
+                "如果当前问题本身已经是完整关键词、术语、实体名或独立问题，输出 skip。"
+                "只允许输出 rewrite 或 skip。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"对话历史：\n{history_text}\n\n当前问题：{question}",
+        },
+    ]
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+    generated_ids = model.generate(
+        **model_inputs,
+        max_new_tokens=4,
+        do_sample=False,
+    )
+    output_ids = generated_ids[0][len(model_inputs.input_ids[0]) :]
+    decision = tokenizer.decode(output_ids, skip_special_tokens=True).strip().lower()
+    return decision
 
 
 class RAGPipeline:
@@ -162,23 +184,56 @@ class RAGPipeline:
             get_reranker(settings.reranker_model) if settings.use_rerank else None
         )
         self.llm = get_llm(settings.chat_model)
+        self.rewrite_judge_llm = None
+        if not settings.use_local_rewrite_classifier:
+            self.rewrite_judge_llm = get_rewrite_judge_llm(settings.rewrite_judge_model)
 
-    @traceable(name="rewrite_question")
-    def rewrite_question(
+    @traceable(name="should_rewrite_question")
+    def should_rewrite_question(
         self,
         question: str,
         chat_history: list[dict] | None = None,
-    ) -> str:
-        if not should_rewrite_question(question, chat_history=chat_history):
-            return question
+    ) -> tuple[bool, str]:
+        normalized_history = normalize_chat_history(chat_history)
+        if len(normalized_history) < 2:
+            return False, "skip_no_history"
 
-        normalized_history = [
-            message
-            for message in chat_history or []
-            if isinstance(message, dict)
-            and message.get("role") in {"user", "assistant"}
-            and str(message.get("content", "")).strip()
-        ]
+        recent_history = normalized_history[-4:]
+        history_lines = []
+        for message in recent_history:
+            role = "用户" if message["role"] == "user" else "助手"
+            history_lines.append(f"{role}: {message['content']}")
+
+        history_text = "\n".join(history_lines)
+
+        if self.settings.use_local_rewrite_classifier:
+            try:
+                decision = run_local_rewrite_decision(
+                    self.settings.local_rewrite_classifier_model,
+                    history_text,
+                    question,
+                )
+                return decision.startswith("rewrite"), decision
+            except Exception:
+                pass
+
+        prompt = (
+            "你是一个查询改写判别器。"
+            "判断当前问题是否依赖对话上下文，只有在必须结合前文才能检索时才输出 rewrite。"
+            "如果当前问题本身已经是完整关键词、术语、实体名或独立问题，就输出 skip。"
+            "只允许输出 rewrite 或 skip，不要输出其他内容。\n\n"
+            f"对话历史：\n{history_text}\n\n"
+            f"当前问题：{question}\n\n"
+            "输出："
+        )
+        decision = self.rewrite_judge_llm.invoke(prompt).content.strip().lower()
+        return decision.startswith("rewrite"), decision
+
+    def rewrite_question_from_history(
+        self,
+        question: str,
+        normalized_history: list[dict],
+    ) -> str:
         recent_history = normalized_history[-6:]
         history_lines = []
         for message in recent_history:
@@ -194,9 +249,24 @@ class RAGPipeline:
             f"当前问题：{question}\n\n"
             "改写后的问题："
         )
-
         rewritten_question = self.llm.invoke(prompt).content.strip()
         return rewritten_question or question
+
+    @traceable(name="rewrite_question")
+    def rewrite_question(
+        self,
+        question: str,
+        chat_history: list[dict] | None = None,
+    ) -> tuple[str, bool, str]:
+        normalized_history = normalize_chat_history(chat_history)
+        should_rewrite, decision = self.should_rewrite_question(
+            question,
+            chat_history=normalized_history,
+        )
+        if not should_rewrite:
+            return question, False, decision
+        rewritten_question = self.rewrite_question_from_history(question, normalized_history)
+        return rewritten_question, rewritten_question != question, decision
 
     @traceable(run_type="retriever")
     def retrieve_vector(self, question: str):
@@ -280,9 +350,11 @@ class RAGPipeline:
         prepare_started_at = time.perf_counter()
 
         rewrite_started_at = time.perf_counter()
-        rewritten_question = self.rewrite_question(question, chat_history=chat_history)
+        rewritten_question, rewrite_used, rewrite_decision = self.rewrite_question(
+            question,
+            chat_history=chat_history,
+        )
         rewrite_time = time.perf_counter() - rewrite_started_at
-        rewrite_used = rewritten_question != question
 
         retrieval_started_at = time.perf_counter()
         candidate_docs = self.retrieve(rewritten_question)
@@ -306,6 +378,7 @@ class RAGPipeline:
             "rerank_scores": rerank_scores,
             "rewritten_question": rewritten_question,
             "rewrite_used": rewrite_used,
+            "rewrite_decision": rewrite_decision,
             "metrics": {
                 "rewrite_time": rewrite_time,
                 "retrieval_time": retrieval_time,

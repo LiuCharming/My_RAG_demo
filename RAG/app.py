@@ -221,6 +221,8 @@ prompt = st.chat_input("Ask a question about the indexed knowledge base")
 if prompt:
     uploads_target = UPLOADS_DIR / sanitize_name(collection_name)
     uploaded_files_dir = str(uploads_target) if uploads_target.exists() else None
+    active_chat_history = list(st.session_state.rewrite_context_messages)
+    active_chat_history.append({"role": "user", "content": prompt})
     st.session_state.messages.append({"role": "user", "content": prompt})
     request_started_at = time.perf_counter()
 
@@ -232,7 +234,7 @@ if prompt:
             with st.spinner("Retrieving and generating answer..."):
                 result = prepare_rag_response(
                     prompt,
-                    chat_history=st.session_state.messages[-6:],
+                    chat_history=active_chat_history,
                     collection_name=collection_name,
                     source_type=source_type,
                     source_url=source_url,
@@ -264,6 +266,7 @@ if prompt:
 
     base_metrics = dict(result.get("metrics", {}))
     base_metrics["rewrite_used"] = result.get("rewrite_used", False)
+    base_metrics["rewrite_decision"] = result.get("rewrite_decision", "skip_no_history")
     base_metrics["generation_time"] = generation_time
     base_metrics["total_time"] = time.perf_counter() - request_started_at
 
@@ -275,4 +278,13 @@ if prompt:
     st.session_state.last_config = result["config"]
     st.session_state.last_metrics = base_metrics
     st.session_state.last_rewritten_question = result.get("rewritten_question", prompt)
+    latest_pair = [
+        {"role": "user", "content": prompt},
+        {"role": "assistant", "content": full_response},
+    ]
+    if result.get("rewrite_decision", "").startswith("rewrite"):
+        updated_context = active_chat_history + [{"role": "assistant", "content": full_response}]
+        st.session_state.rewrite_context_messages = updated_context[-6:]
+    else:
+        st.session_state.rewrite_context_messages = latest_pair
     st.rerun()

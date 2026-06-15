@@ -105,3 +105,6 @@ def ensure_chat_state(session_state) -> None:
 
     if "last_rewritten_question" not in session_state:
         session_state.last_rewritten_question = ""
+
+    if "rewrite_context_messages" not in session_state:
+        session_state.rewrite_context_messages = []
