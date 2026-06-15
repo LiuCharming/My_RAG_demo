@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from rag_service import build_index, delete_knowledge_base, prepare_rag_response
+from rag_service import build_index, delete_knowledge_base, prepare_rag_response, warmup_runtime
 from rag_settings import (
     DEFAULT_DATASET_NAME,
     DEFAULT_DATASET_SPLIT,
@@ -14,6 +14,11 @@ from ui_helpers import ensure_chat_state, list_custom_knowledge_bases, save_uplo
 
 
 st.set_page_config(page_title="RAG System", page_icon="R", layout="wide")
+
+if "runtime_warmed_up" not in st.session_state:
+    with st.spinner("Warming up models..."):
+        warmup_runtime()
+    st.session_state.runtime_warmed_up = True
 
 st.title("RAG System")
 st.caption("Local vector database, retrieval, reranking, and answer generation.")

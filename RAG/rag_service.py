@@ -45,6 +45,23 @@ def get_pipeline(
     return RAGPipeline(settings)
 
 
+@lru_cache(maxsize=1)
+def warmup_runtime() -> dict:
+    from index_builder import create_embeddings
+    from rag_pipeline import get_llm, get_reranker
+
+    settings = RAGSettings()
+    create_embeddings(settings)
+    get_llm(settings.chat_model)
+    if settings.use_rerank:
+        get_reranker(settings.reranker_model)
+    return {
+        "embedding_model": settings.embedding_model,
+        "chat_model": settings.chat_model,
+        "reranker_model": settings.reranker_model if settings.use_rerank else None,
+    }
+
+
 def build_index(
     collection_name: str = "rag_demo",
     source_type: str = "web",
