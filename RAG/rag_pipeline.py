@@ -59,6 +59,75 @@ def ensure_runtime_env() -> None:
         raise ValueError("DEEPSEEK_API_KEY is not set.")
 
 
+def should_rewrite_question(question: str, chat_history: list[dict] | None = None) -> bool:
+    text = (question or "").strip()
+    if not text or not chat_history:
+        return False
+
+    normalized_history = [
+        message
+        for message in chat_history
+        if isinstance(message, dict)
+        and message.get("role") in {"user", "assistant"}
+        and str(message.get("content", "")).strip()
+    ]
+    if len(normalized_history) < 2:
+        return False
+
+    lower_text = text.lower()
+    contextual_markers = (
+        "它",
+        "他",
+        "她",
+        "这个",
+        "那个",
+        "这些",
+        "那些",
+        "上述",
+        "上面",
+        "前面",
+        "刚才",
+        "之前",
+        "这里",
+        "其",
+        "该",
+        "that",
+        "this",
+        "these",
+        "those",
+        "it",
+        "they",
+        "them",
+        "previous",
+        "earlier",
+        "former",
+        "latter",
+        "above",
+    )
+    if any(marker in text for marker in contextual_markers):
+        return True
+    if any(f" {marker} " in f" {lower_text} " for marker in contextual_markers):
+        return True
+
+    if len(text) <= 12:
+        return True
+
+    follow_up_starts = (
+        "那",
+        "那么",
+        "然后",
+        "所以",
+        "继续",
+        "再",
+        "and ",
+        "so ",
+        "then ",
+        "what about",
+        "how about",
+    )
+    return text.startswith(follow_up_starts) or lower_text.startswith(follow_up_starts)
+
+
 @lru_cache(maxsize=8)
 def get_reranker(model_name: str) -> CrossEncoder:
     return CrossEncoder(model_name, cache_folder=str(MODEL_CACHE_DIR))
@@ -100,19 +169,16 @@ class RAGPipeline:
         question: str,
         chat_history: list[dict] | None = None,
     ) -> str:
-        if not chat_history:
+        if not should_rewrite_question(question, chat_history=chat_history):
             return question
 
         normalized_history = [
             message
-            for message in chat_history
+            for message in chat_history or []
             if isinstance(message, dict)
             and message.get("role") in {"user", "assistant"}
             and str(message.get("content", "")).strip()
         ]
-        if not normalized_history:
-            return question
-
         recent_history = normalized_history[-6:]
         history_lines = []
         for message in recent_history:
@@ -201,6 +267,7 @@ class RAGPipeline:
             "candidate_docs": prepared["candidate_docs"],
             "rerank_scores": prepared["rerank_scores"],
             "rewritten_question": prepared.get("rewritten_question", question),
+            "rewrite_used": prepared.get("rewrite_used", False),
             "metrics": prepared.get("metrics", {}),
         }
 
@@ -215,6 +282,7 @@ class RAGPipeline:
         rewrite_started_at = time.perf_counter()
         rewritten_question = self.rewrite_question(question, chat_history=chat_history)
         rewrite_time = time.perf_counter() - rewrite_started_at
+        rewrite_used = rewritten_question != question
 
         retrieval_started_at = time.perf_counter()
         candidate_docs = self.retrieve(rewritten_question)
@@ -237,6 +305,7 @@ class RAGPipeline:
             "candidate_docs": candidate_docs,
             "rerank_scores": rerank_scores,
             "rewritten_question": rewritten_question,
+            "rewrite_used": rewrite_used,
             "metrics": {
                 "rewrite_time": rewrite_time,
                 "retrieval_time": retrieval_time,

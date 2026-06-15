@@ -165,7 +165,8 @@ with right:
     if st.session_state.last_config:
         st.json(st.session_state.last_config, expanded=True)
 
-    if st.session_state.last_rewritten_question:
+    rewrite_used = bool(st.session_state.last_metrics.get("rewrite_used")) if st.session_state.last_metrics else False
+    if rewrite_used and st.session_state.last_rewritten_question:
         st.subheader("Search Query")
         st.caption("Question used for retrieval after multi-turn rewriting")
         st.write(st.session_state.last_rewritten_question)
@@ -257,6 +258,7 @@ if prompt:
             generation_time = time.perf_counter() - generation_started_at
 
     base_metrics = dict(result.get("metrics", {}))
+    base_metrics["rewrite_used"] = result.get("rewrite_used", False)
     base_metrics["generation_time"] = generation_time
     base_metrics["total_time"] = time.perf_counter() - request_started_at
 
