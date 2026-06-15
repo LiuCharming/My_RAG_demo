@@ -176,6 +176,11 @@ with left:
 with right:
     st.subheader("Retrieved Evidence")
     st.page_link(
+        "pages/System_Test.py",
+        label="Open system test page",
+        icon=":material/science:",
+    )
+    st.page_link(
         "pages/Knowledge_Base_Preview.py",
         label="Open knowledge base preview",
         icon=":material/search:",
