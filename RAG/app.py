@@ -7,6 +7,7 @@ from rag_settings import (
     DEFAULT_DATASET_NAME,
     DEFAULT_DATASET_SPLIT,
     DEFAULT_SOURCE_URL,
+    RAGSettings,
     UPLOADS_DIR,
     sanitize_name,
 )
@@ -114,6 +115,12 @@ with st.sidebar:
     )
 
     st.subheader("Retrieval Settings")
+    chat_backend = st.selectbox(
+        "Answer model",
+        options=["deepseek_api", "local_qwen"],
+        index=0,
+        format_func=lambda value: "DeepSeek API" if value == "deepseek_api" else "Local Qwen2.5-0.5B",
+    )
     retrieval_mode = st.selectbox(
         "Retrieval mode",
         options=["vector", "bm25", "hybrid"],
@@ -143,6 +150,7 @@ with st.sidebar:
                 retrieve_k=retrieve_k,
                 use_rerank=use_rerank,
                 rerank_k=rerank_k,
+                chat_backend=chat_backend,
             )
         st.success(f"Index ready. Chunks: {len(build_result['splits'])}")
 
@@ -248,6 +256,7 @@ if prompt:
                     retrieve_k=retrieve_k,
                     use_rerank=use_rerank,
                     rerank_k=rerank_k,
+                    chat_backend=chat_backend,
                 )
             generation_started_at = time.perf_counter()
 

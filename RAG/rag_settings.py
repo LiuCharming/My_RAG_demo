@@ -35,6 +35,8 @@ class RAGSettings:
     rerank_k: int = 2
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     reranker_model: str = "BAAI/bge-reranker-base"
+    chat_backend: str = "deepseek_api"
     chat_model: str = "deepseek-v4-flash"
     use_local_rewrite_model: bool = True
     local_rewrite_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    local_chat_model: str = "Qwen/Qwen2.5-0.5B-Instruct"

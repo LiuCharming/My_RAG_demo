@@ -24,6 +24,7 @@ def get_pipeline(
     retrieve_k: int,
     use_rerank: bool,
     rerank_k: int,
+    chat_backend: str,
 ) -> "RAGPipeline":
     from rag_pipeline import RAGPipeline
 
@@ -41,6 +42,7 @@ def get_pipeline(
         retrieve_k=retrieve_k,
         use_rerank=use_rerank,
         rerank_k=rerank_k,
+        chat_backend=chat_backend,
     )
     return RAGPipeline(settings)
 
@@ -56,7 +58,13 @@ def warmup_runtime() -> dict:
 
     settings = RAGSettings()
     create_embeddings(settings)
-    get_llm(settings.chat_model)
+    if settings.chat_backend == "local_qwen":
+        try:
+            get_local_rewrite_model(settings.local_chat_model)
+        except Exception:
+            get_llm(settings.chat_model)
+    else:
+        get_llm(settings.chat_model)
     if settings.use_local_rewrite_model:
         try:
             get_local_rewrite_model(settings.local_rewrite_model)
@@ -66,7 +74,7 @@ def warmup_runtime() -> dict:
         get_reranker(settings.reranker_model)
     return {
         "embedding_model": settings.embedding_model,
-        "chat_model": settings.chat_model,
+        "chat_model": settings.local_chat_model if settings.chat_backend == "local_qwen" else settings.chat_model,
         "rewrite_model": settings.local_rewrite_model if settings.use_local_rewrite_model else settings.chat_model,
         "reranker_model": settings.reranker_model if settings.use_rerank else None,
     }
@@ -86,6 +94,7 @@ def build_index(
     retrieve_k: int = 10,
     use_rerank: bool = True,
     rerank_k: int = 2,
+    chat_backend: str = RAGSettings.chat_backend,
 ) -> dict:
     from index_builder import rebuild_vector_store
 
@@ -103,6 +112,7 @@ def build_index(
         retrieve_k=retrieve_k,
         use_rerank=use_rerank,
         rerank_k=rerank_k,
+        chat_backend=chat_backend,
     )
     get_pipeline.cache_clear()
     return rebuild_vector_store(settings)
@@ -240,6 +250,7 @@ def ask_rag(
     retrieve_k: int = 10,
     use_rerank: bool = True,
     rerank_k: int = 2,
+    chat_backend: str = RAGSettings.chat_backend,
 ) -> dict:
     pipeline = get_pipeline(
         collection_name=collection_name,
@@ -255,6 +266,7 @@ def ask_rag(
         retrieve_k=retrieve_k,
         use_rerank=use_rerank,
         rerank_k=rerank_k,
+        chat_backend=chat_backend,
     )
     result = pipeline.ask(question, chat_history=chat_history)
     return {
@@ -278,6 +290,7 @@ def ask_rag(
             "retrieve_k": retrieve_k,
             "use_rerank": use_rerank,
             "rerank_k": rerank_k,
+            "chat_backend": chat_backend,
         },
     }
 
@@ -298,6 +311,7 @@ def prepare_rag_response(
     retrieve_k: int = 10,
     use_rerank: bool = True,
     rerank_k: int = 2,
+    chat_backend: str = RAGSettings.chat_backend,
 ) -> dict:
     pipeline = get_pipeline(
         collection_name=collection_name,
@@ -313,6 +327,7 @@ def prepare_rag_response(
         retrieve_k=retrieve_k,
         use_rerank=use_rerank,
         rerank_k=rerank_k,
+        chat_backend=chat_backend,
     )
     prepared = pipeline.prepare_answer(question, chat_history=chat_history)
     return {
@@ -336,5 +351,6 @@ def prepare_rag_response(
             "retrieve_k": retrieve_k,
             "use_rerank": use_rerank,
             "rerank_k": rerank_k,
+            "chat_backend": chat_backend,
         },
     }

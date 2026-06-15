@@ -117,26 +117,16 @@ def get_local_rewrite_model(model_name: str):
     return tokenizer, model
 
 
-def run_local_rewrite(
+def generate_with_local_model(
     model_name: str,
-    history_text: str,
-    question: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_new_tokens: int = 256,
 ) -> str:
     tokenizer, model = get_local_rewrite_model(model_name)
     messages = [
-        {
-            "role": "system",
-            "content": (
-                "你是一个查询改写器。"
-                "请把当前问题改写成适合检索的独立问题。"
-                "如果当前问题本身已经完整、明确、不依赖上下文，就原样输出当前问题。"
-                "不要回答问题，只输出最终检索问题。"
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"对话历史：\n{history_text}\n\n当前问题：{question}",
-        },
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
     ]
     text = tokenizer.apply_chat_template(
         messages,
@@ -146,11 +136,29 @@ def run_local_rewrite(
     model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
     generated_ids = model.generate(
         **model_inputs,
-        max_new_tokens=64,
+        max_new_tokens=max_new_tokens,
         do_sample=False,
     )
     output_ids = generated_ids[0][len(model_inputs.input_ids[0]) :]
-    rewritten = tokenizer.decode(output_ids, skip_special_tokens=True).strip()
+    return tokenizer.decode(output_ids, skip_special_tokens=True).strip()
+
+
+def run_local_rewrite(
+    model_name: str,
+    history_text: str,
+    question: str,
+) -> str:
+    rewritten = generate_with_local_model(
+        model_name,
+        system_prompt=(
+            "你是一个查询改写器。"
+            "请把当前问题改写成适合检索的独立问题。"
+            "如果当前问题本身已经完整、明确、不依赖上下文，就原样输出当前问题。"
+            "不要回答问题，只输出最终检索问题。"
+        ),
+        user_prompt=f"对话历史：\n{history_text}\n\n当前问题：{question}",
+        max_new_tokens=64,
+    )
     return rewritten or question
 
 
@@ -171,7 +179,7 @@ class RAGPipeline:
         self.reranker = (
             get_reranker(settings.reranker_model) if settings.use_rerank else None
         )
-        self.llm = get_llm(settings.chat_model)
+        self.llm = None if settings.chat_backend == "local_qwen" else get_llm(settings.chat_model)
 
     @traceable(name="rewrite_question")
     def rewrite_question(
@@ -267,12 +275,16 @@ class RAGPipeline:
 
     def answer(self, question: str, retrieved_docs: list) -> str:
         context = "\n\n".join(doc.page_content for doc in retrieved_docs)
-        prompt = (
-            "Answer only with the provided context. "
-            "If the context is insufficient, say you do not know.\n\n"
-            f"Context:\n{context}\n\nQuestion: {question}"
-        )
-        return self.llm.invoke(prompt).content
+        system_prompt = "Answer only with the provided context. If the context is insufficient, say you do not know."
+        user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
+        if self.settings.chat_backend == "local_qwen":
+            return generate_with_local_model(
+                self.settings.local_chat_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_new_tokens=512,
+            )
+        return self.llm.invoke(f"{system_prompt}\n\n{user_prompt}").content
 
     def ask(self, question: str, chat_history: list[dict] | None = None) -> dict:
         prepared = self.prepare_answer(question, chat_history=chat_history)
@@ -346,12 +358,24 @@ class RAGPipeline:
             return
 
         context = "\n\n".join(doc.page_content for doc in retrieved_docs)
-        prompt = (
-            "Answer only with the provided context. "
-            "If the context is insufficient, say you do not know.\n\n"
-            f"Context:\n{context}\n\nQuestion: {question}"
-        )
+        system_prompt = "Answer only with the provided context. If the context is insufficient, say you do not know."
+        user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
 
+        if self.settings.chat_backend == "local_qwen":
+            full_text = generate_with_local_model(
+                self.settings.local_chat_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_new_tokens=512,
+            )
+            if not full_text:
+                return
+            chunk_size = 24
+            for index in range(0, len(full_text), chunk_size):
+                yield full_text[index : index + chunk_size]
+            return
+
+        prompt = f"{system_prompt}\n\n{user_prompt}"
         for chunk in self.llm.stream(prompt):
             text = getattr(chunk, "content", None)
             if text:
