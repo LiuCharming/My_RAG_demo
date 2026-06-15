@@ -50,31 +50,24 @@ def warmup_runtime() -> dict:
     from index_builder import create_embeddings
     from rag_pipeline import (
         get_llm,
-        get_local_rewrite_classifier,
+        get_local_rewrite_model,
         get_reranker,
-        get_rewrite_judge_llm,
     )
 
     settings = RAGSettings()
     create_embeddings(settings)
     get_llm(settings.chat_model)
-    if settings.use_local_rewrite_classifier:
+    if settings.use_local_rewrite_model:
         try:
-            get_local_rewrite_classifier(settings.local_rewrite_classifier_model)
+            get_local_rewrite_model(settings.local_rewrite_model)
         except Exception:
-            get_rewrite_judge_llm(settings.rewrite_judge_model)
-    else:
-        get_rewrite_judge_llm(settings.rewrite_judge_model)
+            pass
     if settings.use_rerank:
         get_reranker(settings.reranker_model)
     return {
         "embedding_model": settings.embedding_model,
         "chat_model": settings.chat_model,
-        "rewrite_judge_model": (
-            settings.local_rewrite_classifier_model
-            if settings.use_local_rewrite_classifier
-            else settings.rewrite_judge_model
-        ),
+        "rewrite_model": settings.local_rewrite_model if settings.use_local_rewrite_model else settings.chat_model,
         "reranker_model": settings.reranker_model if settings.use_rerank else None,
     }
 
