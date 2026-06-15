@@ -35,6 +35,13 @@
 - `bm25`：更偏关键词匹配
 - `hybrid`：结合两者结果
 
+当前 `hybrid` 已不是简单拼接，而是：
+
+- 向量检索和 `bm25` 会各自先召回候选
+- 通过 `RRF`（Reciprocal Rank Fusion）做融合排序
+- 融合前后都会按稳定文档标识去重
+- 再交给 rerank 进行最终排序
+
 ### 3. Rerank 开关
 
 页面中可以直接打开或关闭 rerank，用于比较：
@@ -112,6 +119,39 @@
 
 `OCR_RAG.py` 这一部分用于图像文本识别与 OCR-RAG 实验，可作为独立能力继续扩展。
 
+### 10. 系统测试页
+
+测试页文件：
+
+- [System_Test.py](/F:/ls-quickstart/RAG/pages/System_Test.py)
+
+支持：
+
+- 单题测试
+- 手动输入多轮历史测试改写
+- 批量 case 回归测试
+- 基于 `hfl/cmrc2018` 的数据集抽样评测
+- 查看改写结果、命中证据、耗时和评测指标
+
+数据集评测当前支持：
+
+- `train`
+- `validation`
+- `test`
+
+当前已接入的主要指标包括：
+
+- `Answer Hit Rate`
+- `Answer EM`
+- `Answer F1`
+- `Top Chunk Hit Rate`
+- `Top-k Hit Rate`
+- `Recall@k`
+- `Precision@k`
+- `MRR`
+- `Relevance`
+- `Faithfulness`
+
 ---
 
 ## 最近新增的重要改动
@@ -188,6 +228,54 @@
 
 用于把依赖上下文的追问改写成更适合检索的独立问题。
 
+### 8. 本地 / API 问答模型可切换
+
+当前页面中可以切换：
+
+- `deepseek_api`
+- `local_qwen`
+
+右侧配置区会直接显示当前实际使用的：
+
+- `chat backend`
+- `chat model`
+- `rewrite model`
+
+便于确认页面选择和真实运行模型是否一致。
+
+### 9. 本地模型常驻缓存
+
+本地重写模型和本地问答模型已做资源级缓存，目标是：
+
+- 避免每次提问重新加载模型
+- 减少第一次提问后的重复冷启动
+- 提高本地 Qwen 模式下的连续问答体验
+
+### 10. 数据集评测指标补充
+
+系统测试页中的数据集评测，当前分为两类指标：
+
+1. 检索指标
+   - `Top Chunk Hit Rate`
+   - `Top-k Hit Rate`
+   - `Recall@k`
+   - `Precision@k`
+   - `MRR`
+
+2. 回答指标
+   - `Answer Hit Rate`
+   - `Answer EM`
+   - `Answer F1`
+   - `Relevance`
+   - `Faithfulness`
+
+其中：
+
+- `Relevance`：回答是否真正回答了问题
+- `Faithfulness`：回答是否被检索证据支撑
+
+这两项属于可选 LLM 评测，默认关闭，打开后会更慢，也可能额外使用 API 调用。
+
 ---
 
 ## 项目结构
@@ -213,6 +301,7 @@ RAG/
   ui_helpers.py
   pages/
     Knowledge_Base_Preview.py
+    System_Test.py
 ```
 
 各文件职责：
@@ -225,6 +314,7 @@ RAG/
 - `rag_service.py`：页面调用的统一服务层
 - `ui_helpers.py`：页面状态与上传辅助逻辑
 - `Knowledge_Base_Preview.py`：知识库预览、搜索与编辑
+- `System_Test.py`：单题测试、批量回归与数据集评测
 
 ---
 
@@ -333,6 +423,23 @@ docker compose up -d --build
 2. 在聊天框输入问题
 3. 右侧查看证据 chunk、rerank 分数、检索配置和性能信息
 
+### 系统测试
+
+1. 打开 `Open system test page`
+2. 选择知识源、检索模式和回答模型
+3. 根据需要选择：
+   - 单题测试
+   - 批量测试
+   - 数据集评测
+4. 查看改写结果、证据块、检索指标、回答指标和总耗时
+
+如果要公平评测数据集，请尽量保持：
+
+- 当前知识库构建时使用的 `dataset split`
+- 测试页中选择的 `Evaluation split`
+
+两者一致后再评测，否则结果会被“索引 split 和评测 split 不一致”干扰。
+
 ### 多轮追问
 
 当前多轮追问流程如下：
@@ -407,6 +514,9 @@ sudo docker compose up -d --build
 - 页眉页脚清理
 - 更细粒度的知识库编辑
 - 更丰富的多轮改写调试信息
+- 评测结果导出 CSV
+- 数据集评测并发执行
+- 更严格的抽取式答案模式
 
 ---
 
