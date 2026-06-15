@@ -3,14 +3,14 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
-from langchain_deepseek import ChatDeepSeek
-from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
+from langchain_core.documents import Document
+from langchain_deepseek import ChatDeepSeek
+from langsmith import traceable
 from sentence_transformers import CrossEncoder
 
 from index_builder import load_chunks_cache, load_vector_store
 from rag_settings import MODEL_CACHE_DIR, RAGSettings
-from langsmith import traceable
 
 try:
     import jieba
@@ -37,10 +37,7 @@ def load_documents_from_vector_store(vector_store) -> list[Document]:
     documents = payload.get("documents") or []
     metadatas = payload.get("metadatas") or []
     return [
-        Document(
-            page_content=page_content,
-            metadata=metadata or {},
-        )
+        Document(page_content=page_content, metadata=metadata or {})
         for page_content, metadata in zip(documents, metadatas)
         if page_content
     ]
@@ -98,7 +95,11 @@ class RAGPipeline:
         self.llm = get_llm(settings.chat_model)
 
     @traceable(name="rewrite_question")
-    def rewrite_question(self, question: str, chat_history: list[dict] | None = None) -> str:
+    def rewrite_question(
+        self,
+        question: str,
+        chat_history: list[dict] | None = None,
+    ) -> str:
         if not chat_history:
             return question
 
@@ -118,11 +119,12 @@ class RAGPipeline:
             role = "用户" if message["role"] == "user" else "助手"
             history_lines.append(f"{role}: {message['content']}")
 
+        history_text = "\n".join(history_lines)
         prompt = (
             "请根据对话历史，将当前问题改写成一个完整、明确、适合知识检索的独立问题。"
             "如果当前问题已经足够完整，就保持原意。"
             "不要回答问题，只输出改写后的问题。\n\n"
-            f"对话历史：\n{'\n'.join(history_lines)}\n\n"
+            f"对话历史：\n{history_text}\n\n"
             f"当前问题：{question}\n\n"
             "改写后的问题："
         )
@@ -165,6 +167,7 @@ class RAGPipeline:
             return merged_docs[: self.settings.retrieve_k]
 
         return self.retrieve_vector(question)
+
     @traceable(name="rerank")
     def rerank(self, question: str, candidate_docs: list):
         if not candidate_docs:
@@ -177,7 +180,7 @@ class RAGPipeline:
             reverse=True,
         )
         return scored_docs[: self.settings.rerank_k]
-    
+
     def answer(self, question: str, retrieved_docs: list) -> str:
         context = "\n\n".join(doc.page_content for doc in retrieved_docs)
         prompt = (
@@ -186,7 +189,7 @@ class RAGPipeline:
             f"Context:\n{context}\n\nQuestion: {question}"
         )
         return self.llm.invoke(prompt).content
-    #@traceable(run_type="chain")
+
     def ask(self, question: str, chat_history: list[dict] | None = None) -> dict:
         prepared = self.prepare_answer(question, chat_history=chat_history)
         full_answer = "".join(
@@ -200,8 +203,13 @@ class RAGPipeline:
             "rewritten_question": prepared.get("rewritten_question", question),
             "metrics": prepared.get("metrics", {}),
         }
+
     @traceable(run_type="chain")
-    def prepare_answer(self, question: str, chat_history: list[dict] | None = None) -> dict:
+    def prepare_answer(
+        self,
+        question: str,
+        chat_history: list[dict] | None = None,
+    ) -> dict:
         prepare_started_at = time.perf_counter()
 
         rewrite_started_at = time.perf_counter()
@@ -236,6 +244,7 @@ class RAGPipeline:
                 "prepare_time": prepare_time,
             },
         }
+
     @traceable(metadata={"llm": "deepseek-v4-flash"})
     def stream_answer(self, question: str, retrieved_docs: list):
         if not retrieved_docs:
