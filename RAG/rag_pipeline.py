@@ -51,6 +51,35 @@ def load_documents_from_vector_store(vector_store) -> list[Document]:
     ]
 
 
+def document_key(doc: Document) -> tuple:
+    metadata = doc.metadata or {}
+    stable_identity = (
+        metadata.get("chunk_id"),
+        metadata.get("dataset"),
+        metadata.get("split"),
+        metadata.get("source"),
+        metadata.get("source_url"),
+        metadata.get("uploaded_files_dir"),
+        metadata.get("custom_source_name"),
+        metadata.get("start_index"),
+    )
+    if any(value is not None for value in stable_identity):
+        return stable_identity
+    return (doc.page_content,)
+
+
+def unique_documents(documents: list[Document]) -> list[Document]:
+    unique_docs = []
+    seen_keys = set()
+    for doc in documents:
+        key = document_key(doc)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        unique_docs.append(doc)
+    return unique_docs
+
+
 def load_local_env() -> None:
     if load_dotenv is None:
         return
@@ -225,17 +254,49 @@ class RAGPipeline:
         return rewritten_question, rewrite_used, rewrite_decision
 
     @traceable(run_type="retriever")
-    def retrieve_vector(self, question: str):
-        return self.vector_store.similarity_search(
+    def retrieve_vector(self, question: str, k: int | None = None):
+        return unique_documents(self.vector_store.similarity_search(
             question,
-            k=self.settings.retrieve_k,
-        )
+            k=k or self.settings.retrieve_k,
+        ))
 
     @traceable(run_type="retriever")
-    def retrieve_bm25(self, question: str):
+    def retrieve_bm25(self, question: str, k: int | None = None):
         if self.bm25_retriever is None:
             return []
-        return self.bm25_retriever.invoke(question)
+        original_k = self.bm25_retriever.k
+        self.bm25_retriever.k = k or self.settings.retrieve_k
+        try:
+            return unique_documents(self.bm25_retriever.invoke(question))
+        finally:
+            self.bm25_retriever.k = original_k
+
+    def hybrid_candidate_limit(self) -> int:
+        if self.settings.use_rerank and self.settings.rerank_k > 0:
+            return max(self.settings.retrieve_k * 2, self.settings.rerank_k * 4, 8)
+        return self.settings.retrieve_k
+
+    def reciprocal_rank_fuse(
+        self,
+        ranked_lists: list[list[Document]],
+        final_k: int,
+        rrf_k: int = 60,
+    ) -> list[Document]:
+        fused_scores: dict[tuple, float] = {}
+        doc_lookup: dict[tuple, Document] = {}
+
+        for ranked_docs in ranked_lists:
+            for rank, doc in enumerate(ranked_docs, start=1):
+                key = document_key(doc)
+                doc_lookup[key] = doc
+                fused_scores[key] = fused_scores.get(key, 0.0) + 1.0 / (rrf_k + rank)
+
+        sorted_docs = sorted(
+            fused_scores.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        return unique_documents([doc_lookup[key] for key, _ in sorted_docs[:final_k]])
 
     @traceable(run_type="retriever")
     def retrieve(self, question: str):
@@ -243,20 +304,13 @@ class RAGPipeline:
             return self.retrieve_bm25(question)
 
         if self.settings.retrieval_mode == "hybrid":
-            vector_docs = self.retrieve_vector(question)
-            bm25_docs = self.retrieve_bm25(question)
-            merged_docs = []
-            seen_keys = set()
-            for doc in vector_docs + bm25_docs:
-                key = (
-                    doc.page_content,
-                    tuple(sorted((doc.metadata or {}).items())),
-                )
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                merged_docs.append(doc)
-            return merged_docs[: self.settings.retrieve_k]
+            candidate_k = self.hybrid_candidate_limit()
+            vector_docs = self.retrieve_vector(question, k=candidate_k)
+            bm25_docs = self.retrieve_bm25(question, k=candidate_k)
+            return self.reciprocal_rank_fuse(
+                [vector_docs, bm25_docs],
+                final_k=candidate_k,
+            )
 
         return self.retrieve_vector(question)
 
@@ -271,7 +325,15 @@ class RAGPipeline:
             key=lambda item: float(item[1]),
             reverse=True,
         )
-        return scored_docs[: self.settings.rerank_k]
+        unique_scored_docs = []
+        seen_keys = set()
+        for doc, score in scored_docs:
+            key = document_key(doc)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            unique_scored_docs.append((doc, score))
+        return unique_scored_docs[: self.settings.rerank_k]
 
     def answer(self, question: str, retrieved_docs: list) -> str:
         context = "\n\n".join(doc.page_content for doc in retrieved_docs)
