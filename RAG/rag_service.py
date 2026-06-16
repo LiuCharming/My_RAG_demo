@@ -63,6 +63,8 @@ def warmup_runtime() -> dict:
             get_local_rewrite_model(settings.local_chat_model)
         except Exception:
             get_llm(settings.chat_model)
+    elif settings.chat_backend == "vllm_openai":
+        pass
     else:
         get_llm(settings.chat_model)
     if settings.use_local_rewrite_model:
@@ -74,7 +76,13 @@ def warmup_runtime() -> dict:
         get_reranker(settings.reranker_model)
     return {
         "embedding_model": settings.embedding_model,
-        "chat_model": settings.local_chat_model if settings.chat_backend == "local_qwen" else settings.chat_model,
+        "chat_model": (
+            settings.local_chat_model
+            if settings.chat_backend == "local_qwen"
+            else settings.vllm_model
+            if settings.chat_backend == "vllm_openai"
+            else settings.chat_model
+        ),
         "rewrite_model": settings.local_rewrite_model if settings.use_local_rewrite_model else settings.chat_model,
         "reranker_model": settings.reranker_model if settings.use_rerank else None,
     }

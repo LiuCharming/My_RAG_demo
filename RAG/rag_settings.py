@@ -40,3 +40,5 @@ class RAGSettings:
     use_local_rewrite_model: bool = True
     local_rewrite_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     local_chat_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    vllm_base_url: str = "http://127.0.0.1:8000/v1"
+    vllm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"

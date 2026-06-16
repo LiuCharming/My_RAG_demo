@@ -119,10 +119,11 @@ with st.sidebar:
     answer_model_labels = {
         "deepseek_api": f"DeepSeek API ({settings_defaults.chat_model})",
         "local_qwen": f"Local Qwen ({settings_defaults.local_chat_model})",
+        "vllm_openai": f"vLLM Local Server ({settings_defaults.vllm_model})",
     }
     chat_backend = st.selectbox(
         "Answer model",
-        options=["deepseek_api", "local_qwen"],
+        options=["deepseek_api", "local_qwen", "vllm_openai"],
         index=0,
         format_func=lambda value: answer_model_labels.get(value, value),
     )
@@ -191,6 +192,8 @@ with right:
         actual_chat_model = (
             settings_defaults.local_chat_model
             if actual_chat_backend == "local_qwen"
+            else settings_defaults.vllm_model
+            if actual_chat_backend == "vllm_openai"
             else settings_defaults.chat_model
         )
         actual_rewrite_model = (

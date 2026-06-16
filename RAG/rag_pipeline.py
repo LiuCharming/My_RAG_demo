@@ -1,4 +1,7 @@
 import os
+import json
+import requests
+import sys
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -95,6 +98,10 @@ def ensure_runtime_env() -> None:
     os.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))
     os.environ.setdefault("HF_DATASETS_CACHE", str(HF_CACHE_DIR / "datasets"))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(HF_CACHE_DIR / "hub"))
+
+
+def ensure_deepseek_env() -> None:
+    ensure_runtime_env()
     if not os.environ.get("DEEPSEEK_API_KEY"):
         raise ValueError("DEEPSEEK_API_KEY is not set.")
 
@@ -116,7 +123,7 @@ def get_reranker(model_name: str) -> CrossEncoder:
 
 @lru_cache(maxsize=8)
 def get_llm(model_name: str) -> ChatDeepSeek:
-    ensure_runtime_env()
+    ensure_deepseek_env()
     return ChatDeepSeek(
         model=model_name,
         temperature=0,
@@ -143,6 +150,14 @@ def get_local_rewrite_model(model_name: str):
         device_map="auto",
         local_files_only=False,
     )
+    print(f"[local-model] sys.executable = {sys.executable}")
+    print(f"[local-model] model_name = {model_name}")
+    print(f"[local-model] torch.__version__ = {getattr(torch, '__version__', 'unknown')}")
+    print(f"[local-model] torch.version.cuda = {getattr(torch.version, 'cuda', None)}")
+    print(f"[local-model] torch.cuda.is_available = {torch.cuda.is_available()}")
+    print(f"[local-model] hf_device_map = {getattr(model, 'hf_device_map', None)}")
+    print(f"[local-model] model.device = {getattr(model, 'device', 'unknown')}")
+    print(f"[local-model] first_param.device = {next(model.parameters()).device}")
     return tokenizer, model
 
 
@@ -170,6 +185,50 @@ def generate_with_local_model(
     )
     output_ids = generated_ids[0][len(model_inputs.input_ids[0]) :]
     return tokenizer.decode(output_ids, skip_special_tokens=True).strip()
+
+
+def call_vllm_chat(
+    base_url: str,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    stream: bool = False,
+):
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "stream": stream,
+    }
+    if not stream:
+        response = requests.post(url, json=payload, timeout=300)
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+    response = requests.post(url, json=payload, timeout=300, stream=True)
+    response.raise_for_status()
+    for raw_line in response.iter_lines(decode_unicode=True):
+        if not raw_line:
+            continue
+        line = raw_line.strip()
+        if not line.startswith("data:"):
+            continue
+        data_str = line[len("data:") :].strip()
+        if data_str == "[DONE]":
+            break
+        try:
+            data = json.loads(data_str)
+        except json.JSONDecodeError:
+            continue
+        delta = data.get("choices", [{}])[0].get("delta", {})
+        text = delta.get("content")
+        if text:
+            yield text
 
 
 def run_local_rewrite(
@@ -208,7 +267,11 @@ class RAGPipeline:
         self.reranker = (
             get_reranker(settings.reranker_model) if settings.use_rerank else None
         )
-        self.llm = None if settings.chat_backend == "local_qwen" else get_llm(settings.chat_model)
+        self.llm = (
+            None
+            if settings.chat_backend in {"local_qwen", "vllm_openai"}
+            else get_llm(settings.chat_model)
+        )
 
     @traceable(name="rewrite_question")
     def rewrite_question(
@@ -346,6 +409,14 @@ class RAGPipeline:
                 user_prompt=user_prompt,
                 max_new_tokens=512,
             )
+        if self.settings.chat_backend == "vllm_openai":
+            return call_vllm_chat(
+                self.settings.vllm_base_url,
+                self.settings.vllm_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                stream=False,
+            )
         return self.llm.invoke(f"{system_prompt}\n\n{user_prompt}").content
 
     def ask(self, question: str, chat_history: list[dict] | None = None) -> dict:
@@ -435,6 +506,16 @@ class RAGPipeline:
             chunk_size = 24
             for index in range(0, len(full_text), chunk_size):
                 yield full_text[index : index + chunk_size]
+            return
+
+        if self.settings.chat_backend == "vllm_openai":
+            yield from call_vllm_chat(
+                self.settings.vllm_base_url,
+                self.settings.vllm_model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                stream=True,
+            )
             return
 
         prompt = f"{system_prompt}\n\n{user_prompt}"

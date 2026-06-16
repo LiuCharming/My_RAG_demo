@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import time
 
@@ -275,6 +276,44 @@ Only output 0 or 1.
     return judge_with_llm(prompt, model_name)
 
 
+def evaluate_dataset_sample(sample: dict) -> dict:
+    result = run_case(sample["question"])
+    answer_hit = answer_contains_reference(result["answer"], sample["answers"])
+    answer_em = exact_match_any(result["answer"], sample["answers"])
+    answer_f1 = best_f1_against_references(result["answer"], sample["answers"])
+    retrieval_metrics = retrieval_metrics_at_k(
+        result["retrieved_docs"],
+        sample["answers"],
+        k=max(rerank_k if use_rerank else retrieve_k, 1),
+    )
+    relevance_score = None
+    faithfulness_score = None
+    if enable_llm_judge:
+        relevance_score = judge_answer_relevance(
+            sample["question"],
+            result["answer"],
+            settings_defaults.chat_model,
+        )
+        faithfulness_score = judge_answer_faithfulness(
+            sample["question"],
+            result["answer"],
+            result["retrieved_docs"],
+            settings_defaults.chat_model,
+        )
+    rewrite_used = bool(result.get("rewrite_used", False))
+    return {
+        "sample": sample,
+        "result": result,
+        "answer_hit": answer_hit,
+        "answer_em": answer_em,
+        "answer_f1": answer_f1,
+        "retrieval_metrics": retrieval_metrics,
+        "relevance_score": relevance_score,
+        "faithfulness_score": faithfulness_score,
+        "rewrite_used": rewrite_used,
+    }
+
+
 st.set_page_config(page_title="System Test", page_icon="T", layout="wide")
 
 if "runtime_warmed_up" not in st.session_state:
@@ -300,10 +339,11 @@ with st.sidebar:
     answer_model_labels = {
         "deepseek_api": f"DeepSeek API ({settings_defaults.chat_model})",
         "local_qwen": f"Local Qwen ({settings_defaults.local_chat_model})",
+        "vllm_openai": f"vLLM Local Server ({settings_defaults.vllm_model})",
     }
     chat_backend = st.selectbox(
         "Answer model",
-        options=["deepseek_api", "local_qwen"],
+        options=["deepseek_api", "local_qwen", "vllm_openai"],
         index=0,
         format_func=lambda value: answer_model_labels.get(value, value),
     )
@@ -367,6 +407,19 @@ with left:
         step=5,
         disabled=source_config["source_type"] != "dataset",
     )
+    eval_execution_mode = st.selectbox(
+        "Execution mode",
+        options=["serial", "parallel"],
+        index=0,
+        disabled=source_config["source_type"] != "dataset",
+        help="Parallel mode is useful for throughput testing. Local Qwen is best kept at low concurrency.",
+    )
+    requested_concurrency = st.selectbox(
+        "Concurrency",
+        options=[1, 2, 4, 8],
+        index=0,
+        disabled=source_config["source_type"] != "dataset",
+    )
     run_eval = st.button(
         "Run dataset evaluation",
         use_container_width=True,
@@ -393,6 +446,8 @@ with right:
             "chat_model": (
                 settings_defaults.local_chat_model
                 if chat_backend == "local_qwen"
+                else settings_defaults.vllm_model
+                if chat_backend == "vllm_openai"
                 else settings_defaults.chat_model
             ),
             "rewrite_model": (
@@ -401,6 +456,8 @@ with right:
                 else settings_defaults.chat_model
             ),
             "llm_judge_enabled": enable_llm_judge,
+            "eval_execution_mode": eval_execution_mode,
+            "requested_concurrency": requested_concurrency,
         },
         expanded=True,
     )
@@ -554,6 +611,11 @@ if run_eval:
                 eval_split,
                 eval_sample_size,
             )
+            effective_concurrency = requested_concurrency
+            if eval_execution_mode == "serial":
+                effective_concurrency = 1
+            elif chat_backend == "local_qwen":
+                effective_concurrency = min(requested_concurrency, 2)
 
             eval_rows = []
             answer_hit_count = 0
@@ -568,45 +630,38 @@ if run_eval:
             faithfulness_sum = 0.0
             rewrite_used_count = 0
             total_time_sum = 0.0
+            wall_started_at = time.perf_counter()
+            evaluated_items = []
+            if effective_concurrency == 1:
+                for sample in samples:
+                    evaluated_items.append(evaluate_dataset_sample(sample))
+            else:
+                with ThreadPoolExecutor(max_workers=effective_concurrency) as executor:
+                    future_map = {
+                        executor.submit(evaluate_dataset_sample, sample): sample
+                        for sample in samples
+                    }
+                    for future in as_completed(future_map):
+                        evaluated_items.append(future.result())
+            wall_time = time.perf_counter() - wall_started_at
 
-            for sample in samples:
-                result = run_case(sample["question"])
-                answer_hit = answer_contains_reference(result["answer"], sample["answers"])
-                answer_em = exact_match_any(result["answer"], sample["answers"])
-                answer_f1 = best_f1_against_references(result["answer"], sample["answers"])
-                retrieval_metrics = retrieval_metrics_at_k(
-                    result["retrieved_docs"],
-                    sample["answers"],
-                    k=max(rerank_k if use_rerank else retrieve_k, 1),
-                )
-                relevance_score = None
-                faithfulness_score = None
-                if enable_llm_judge:
-                    relevance_score = judge_answer_relevance(
-                        sample["question"],
-                        result["answer"],
-                        settings_defaults.chat_model,
-                    )
-                    faithfulness_score = judge_answer_faithfulness(
-                        sample["question"],
-                        result["answer"],
-                        result["retrieved_docs"],
-                        settings_defaults.chat_model,
-                    )
-                top_chunk_hit = bool(retrieval_metrics["top1_hit"])
-                rewrite_used = bool(result.get("rewrite_used", False))
+            evaluated_items.sort(key=lambda item: item["sample"]["id"])
 
-                answer_hit_count += int(answer_hit)
-                exact_match_count += answer_em
-                f1_sum += answer_f1
+            for item in evaluated_items:
+                sample = item["sample"]
+                result = item["result"]
+                retrieval_metrics = item["retrieval_metrics"]
+                answer_hit_count += int(item["answer_hit"])
+                exact_match_count += item["answer_em"]
+                f1_sum += item["answer_f1"]
                 top_chunk_hit_count += int(retrieval_metrics["top1_hit"])
                 topk_hit_count += int(retrieval_metrics["topk_hit"])
                 recall_at_k_sum += retrieval_metrics["recall_at_k"]
                 precision_at_k_sum += retrieval_metrics["precision_at_k"]
                 mrr_sum += retrieval_metrics["mrr"]
-                relevance_sum += relevance_score or 0.0
-                faithfulness_sum += faithfulness_score or 0.0
-                rewrite_used_count += int(rewrite_used)
+                relevance_sum += item["relevance_score"] or 0.0
+                faithfulness_sum += item["faithfulness_score"] or 0.0
+                rewrite_used_count += int(item["rewrite_used"])
                 total_time_sum += result["metrics"].get("total_time", 0.0)
 
                 eval_rows.append(
@@ -614,18 +669,18 @@ if run_eval:
                         "id": sample["id"],
                         "question": sample["question"],
                         "gold_answers": " | ".join(sample["answers"][:3]),
-                        "answer_hit": answer_hit,
-                        "answer_em": round(answer_em, 2),
-                        "answer_f1": round(answer_f1, 2),
+                        "answer_hit": item["answer_hit"],
+                        "answer_em": round(item["answer_em"], 2),
+                        "answer_f1": round(item["answer_f1"], 2),
                         "top1_hit": bool(retrieval_metrics["top1_hit"]),
                         "topk_hit": bool(retrieval_metrics["topk_hit"]),
                         "precision_at_k": round(retrieval_metrics["precision_at_k"], 2),
                         "recall_at_k": round(retrieval_metrics["recall_at_k"], 2),
                         "mrr": round(retrieval_metrics["mrr"], 2),
                         "first_hit_rank": retrieval_metrics["first_hit_rank"],
-                        "relevance": relevance_score,
-                        "faithfulness": faithfulness_score,
-                        "rewrite_used": rewrite_used,
+                        "relevance": item["relevance_score"],
+                        "faithfulness": item["faithfulness_score"],
+                        "rewrite_used": item["rewrite_used"],
                         "rewritten_question": result.get(
                             "rewritten_question",
                             sample["question"],
@@ -649,6 +704,11 @@ if run_eval:
         summary_left.metric("Rewrite Used Rate", f"{rewrite_used_count / total_cases:.1%}")
         summary_mid.metric("Avg Total Time", f"{total_time_sum / total_cases:.2f}s")
         summary_right.metric("Split", eval_split)
+
+        speed_left, speed_mid, speed_right = st.columns(3)
+        speed_left.metric("Wall Time", f"{wall_time:.2f}s")
+        speed_mid.metric("Throughput", f"{len(eval_rows) / max(wall_time, 1e-6):.2f} samples/s")
+        speed_right.metric("Concurrency", effective_concurrency)
 
         retrieval_left, retrieval_mid, retrieval_right = st.columns(3)
         retrieval_left.metric("Top-k Hit Rate", f"{topk_hit_count / total_cases:.1%}")
